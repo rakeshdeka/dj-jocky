@@ -1,0 +1,88 @@
+
+
+.small_text {
+	@apply m1:text-[.75rem] text-[.75rem] sm:text-[.8rem]  md:text-[.93rem] lg:text-[1rem]  font-SFPro;
+}
+
+.small_text.header_perks {
+	@apply text-white  md:text-left text-center;
+}
+
+.small_text1 {
+	@apply m1:text-[.75rem] text-[.9rem]   md:text-[.75rem] font-SFPro leading-4 font-normal;
+}
+.btn_base {
+	@apply min-w-[8rem]  min-h-[4rem] lg:min-w-[9rem] lg:min-h-[4rem] xl:min-h-[5rem] xl:min-w-[11rem] p-5;
+}
+
+.OP1 {
+	animation: OPS 3s ease-in 1;
+}
+@keyframes OPS {
+	0% {
+		opacity: 0;
+	}
+	50% {
+		opacity: 0.5;
+	}
+	75% {
+		opacity: 0.75;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
+.OP2 {
+	animation: op2 1s ease-out 1;
+}
+@keyframes op2 {
+	0% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.75;
+	}
+	75% {
+		opacity: 0.5;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* width */
+::-webkit-scrollbar {
+	width: 8px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+	background: #383737;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+	background: #c4fe01;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+	background: #c4fe01;
+}
+
+.centerrr1 {
+	-ms-transform: translateX(-50%);
+	transform: translateX(-50%);
+}
+
+/* .cc::-webkit-scrollbar-thumb {
+	background-color: transparent;
+}
+.cc::-webkit-scrollbar-track {
+	background-color: transparent;
+} */
+
+.cc::-webkit-scrollbar {
+	display: none;
+}

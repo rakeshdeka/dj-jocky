@@ -1,0 +1,200 @@
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'); */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================
+   Fonts
+=========================== */
+
+@font-face {
+  font-family: "Monument Extended";
+  font-style: normal;
+  font-weight: 400;
+  src: local("Monument Extended"),
+    url("./assets/font/MonumentExtended-Regular.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Monument Extended";
+  font-style: normal;
+  font-weight: 800;
+  src: local("Monument Extended"),
+    url("./assets/font/MonumentExtended-Ultrabold.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "SF Pro";
+  font-style: normal;
+  font-weight: 400;
+  src: local("SF Pro"),
+    url("./assets/font/SFPRODISPLAYREGULAR.OTF") format("opentype");
+}
+
+@font-face {
+  font-family: "SF Pro";
+  font-style: normal;
+  font-weight: 700;
+  src: local("SF Pro"),
+    url("./assets/font/SFPRODISPLAYBOLD.OTF") format("opentype");
+}
+
+/* ===========================
+   Custom Classes
+=========================== */
+
+.n {
+  transition: top 0.3s ease-in-out;
+}
+
+.hide {
+  top: -30vh;
+  transition: top 0.3s ease-in-out;
+}
+
+/* ===========================
+   Base Styles
+=========================== */
+
+@layer base {
+  :root {
+    --background: 0 0% 7%;
+    --foreground: 210 40% 98%;
+
+    --card: 0 0% 9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 0 0% 9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 100% 47%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 10% 15%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 217 10% 15%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 220 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 240 4.9% 83.9%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "SF Pro", sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Monument Extended", sans-serif;
+    font-weight: 800;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}
+
+/* ===========================
+   Components
+=========================== */
+
+@layer components {
+  .glass-panel {
+    @apply bg-secondary/30 backdrop-blur-sm border border-white/10 shadow-glass;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1;
+  }
+
+  .nav-link {
+    @apply px-4 py-2 text-muted-foreground hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary after:scale-x-0 after:origin-left after:transition-transform hover:after:scale-x-100;
+  }
+
+  .nav-link-active {
+    @apply text-foreground after:scale-x-100;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-md transition-colors duration-200 cursor-pointer;
+  }
+
+  .sidebar-item-active {
+    @apply text-foreground bg-accent font-medium;
+  }
+
+  .menu-icon {
+    @apply w-5 h-5;
+  }
+
+  .mobile-nav-link {
+    @apply py-3 px-4 text-foreground hover:bg-accent/50 transition-colors flex items-center gap-2 rounded-md;
+  }
+
+  .mobile-nav-link-active {
+    @apply bg-accent font-medium;
+  }
+}
+
+/* ===========================
+   Utilities
+=========================== */
+
+@layer utilities {
+  .font-monument {
+    font-family: "Monument Extended", sans-serif;
+  }
+
+  .font-sf {
+    font-family: "SF Pro", sans-serif;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}

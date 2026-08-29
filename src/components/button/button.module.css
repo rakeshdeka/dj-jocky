@@ -1,0 +1,5 @@
+ .btn_default {
+	@apply text-[.75rem] m1:text-[.75rem] sm:text-[.8rem] md:text-[.78rem] lg:text-[.78rem] xl:text-[.93rem] rounded-lg capitalize hover:bg-color-primary hover:text-[#0c0c0c];
+	transition: color 0.3s, background 0.3s, border 0.3s;
+  }
+  

@@ -1,0 +1,182 @@
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { toast } from 'sonner';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+
+import type { RootState } from '../../../../store/store';
+import { createCurrency, fetchCurrencies, updateCurrency } from '../../../../lib/admin-locale-api';
+import { Button } from '../../../../components/dashboard/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../../../components/dashboard/ui/card';
+import { Input } from '../../../../components/dashboard/ui/input';
+import { Label } from '../../../../components/dashboard/ui/label';
+import { Switch } from '../../../../components/dashboard/ui/switch';
+
+export default function AdminCurrencyFormPage() {
+  const navigate = useNavigate();
+  const { currencyId } = useParams<{ currencyId?: string }>();
+  const isEditing = Boolean(currencyId);
+  const { token } = useSelector((state: RootState) => state.auth);
+
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [symbol, setSymbol] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!token || !currencyId) return;
+
+    const loadCurrency = async () => {
+      try {
+        setIsLoading(true);
+        const currencies = await fetchCurrencies(token);
+        const currency = currencies.find((item) => item._id === currencyId);
+        if (!currency) {
+          toast.error('Currency not found');
+          navigate('/admin/settings/currencies');
+          return;
+        }
+        setCode(currency.code || '');
+        setName(currency.name || '');
+        setSymbol(currency.symbol || '');
+        setIsActive(currency.is_active ?? true);
+      } catch {
+        toast.error('Failed to load currency');
+        navigate('/admin/settings/currencies');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCurrency();
+  }, [token, currencyId, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return toast.error('Login required');
+
+    const trimmedCode = code.trim().toUpperCase();
+    const trimmedName = name.trim();
+    const trimmedSymbol = symbol.trim();
+    if (!trimmedCode) return toast.error('Enter currency code');
+    if (!trimmedName) return toast.error('Enter currency name');
+    if (!trimmedSymbol) return toast.error('Enter currency symbol');
+
+    const payload = {
+      code: trimmedCode,
+      name: trimmedName,
+      symbol: trimmedSymbol,
+      is_active: isActive,
+    };
+
+    try {
+      setIsSubmitting(true);
+      if (isEditing && currencyId) {
+        await updateCurrency(token, currencyId, payload);
+        toast.success('Currency updated');
+      } else {
+        await createCurrency(token, payload);
+        toast.success('Currency added');
+      }
+      navigate('/admin/settings/currencies');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'add'} currency`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const disabled = isSubmitting || isLoading;
+
+  return (
+    <div>
+      <Button variant="ghost" size="sm" className="mb-4 -ml-2" asChild>
+        <Link to="/admin/settings/currencies">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Currencies
+        </Link>
+      </Button>
+
+      <div className="mb-6">
+        <h1 className="text-sm font-bold mb-1 tracking-[0.2em]">
+          {isEditing ? 'Edit Currency' : 'Add Currency'}
+        </h1>
+        <p className="text-muted-foreground text-xs">
+          {isEditing ? 'Update currency details.' : 'Create a new currency entry.'}
+        </p>
+      </div>
+
+      <Card className="max-w-lg">
+        <form onSubmit={handleSubmit}>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">Currency Details</CardTitle>
+          </CardHeader>
+          <CardContent className="py-2 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Code</Label>
+              <Input
+                placeholder="INR"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                disabled={disabled}
+                className="text-xs h-8 font-mono uppercase"
+                maxLength={5}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Name</Label>
+              <Input
+                placeholder="Indian Rupee"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={disabled}
+                className="text-xs h-8"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Symbol</Label>
+              <Input
+                placeholder="₹"
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value)}
+                disabled={disabled}
+                className="text-xs h-8 w-24"
+                maxLength={8}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div>
+                <Label className="text-xs">Active</Label>
+                <p className="text-[11px] text-muted-foreground">Show this currency in the app.</p>
+              </div>
+              <Switch checked={isActive} onCheckedChange={setIsActive} disabled={disabled} />
+            </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading currency...
+              </div>
+            )}
+          </CardContent>
+          <CardFooter className="py-3 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/admin/settings/currencies')}
+              disabled={disabled}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={disabled}>
+              {isSubmitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              {isEditing ? 'Update Currency' : 'Add Currency'}
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+    </div>
+  );
+}

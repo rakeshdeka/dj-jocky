@@ -1,0 +1,8 @@
+.ex1e {
+	-ms-overflow-style: none; /* IE and Edge */
+	scrollbar-width: none;
+	/* Firefox */
+}
+/* .ex1e::-webkit-scrollbar {
+	visibility: hidden;
+} */

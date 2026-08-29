@@ -1,0 +1,3 @@
+.header1 {
+	@apply text-color-primary text-center md:text-left  capitalize  text-[1.3rem] m3:text-[1.7rem] md:text-[2.4rem] lg:text-[2.1rem] xl:text-[2.9rem];
+}
