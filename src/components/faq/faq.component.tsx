@@ -1,13 +1,11 @@
-// import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import cross from './cross.svg';
 import plus from './plus.svg';
 import H1 from '../header/header.component';
-// import {useDispatch, useSelector } from 'react-redux';
-
-// import { setFaqId, resetFaq } from './faqSlice';
-// import { RootState, AppDispatch } from '../../store/store';
 import { Transition } from '@headlessui/react';
-
+import { setFaqId } from '../../redux/faqSlice';
+import type { RootState } from '../../store/store';
 
 const faqItems = [
 	{
@@ -90,68 +88,70 @@ interface FaqItemsProps {
 	id: string;
 }
 const FaqItems = (props: FaqItemsProps) => {
-	// const dispatch = useDispatch<AppDispatch>();
-	// const currentFaqId = useSelector((state: RootState) => state.faq.currentFaqId);
-	// const isOpen = currentFaqId === props.id;
-  
-	// const toggleFaq = () => {
-	//   if (isOpen) {
-	// 	dispatch(resetFaq());
-	//   } else {
-	// 	dispatch(setFaqId(props.id));
-	//   }
-	// };
-  
+	const dispatch = useDispatch();
+	const faqId = useSelector((state: RootState) => state.faq.currentFaqId);
+	const [isOpen, setIsOpen] = useState<boolean>(false);
+
+	useEffect(() => {
+		if (faqId !== props.id) {
+			setIsOpen(false);
+		}
+	}, [faqId, props.id]);
 	return (
-	  <div className='bg-[#121212] rounded-2xl cursor-pointer faq'>
-		<div
-		  className='flex justify-between bg-black3 rounded-2xl items-center m2:px-8 py-5 m1:px-4
-				gap-2 m1:text-[.7rem] m2:text-[.8rem]  m3:text-[.85rem] md:text-[.9rem] hover:bg-[#373636]'
-		//   onClick={toggleFaq}
-		>
-		  <span className='w-[90%]'>{props.question}</span>
-		  <span className='w-[10%] justify-end hidden lg:flex'>
+		<div className='bg-[#121212] rounded-2xl cursor-pointer faq'>
+			<div
+				className='flex justify-between bg-black3 rounded-2xl items-center m2:px-8 py-5 m1:px-4
+			  gap-2 m1:text-[.7rem] m2:text-[.8rem]  m3:text-[.85rem] md:text-[.9rem] hover:bg-[#373636]'
+				onClick={() => {
+					dispatch(setFaqId(props.id));
+					setIsOpen(!isOpen);
+				}}>
+				<span className='w-[90%] '>{props.question}</span>
+				<span className=' w-[10%] justify-end hidden lg:flex'>
+					{!isOpen ? (
+						<Transition
+							show={!isOpen}
+							enter='transition-opacity ease-in-out duration-400 delay-75'
+							enterFrom='opacity-0'
+							enterTo='opacity-100'
+							leave='transition-opacity ease-in-out duration-400 delay-75	'
+							leaveFrom='opacity-100'
+							leaveTo='opacity-0'>
+							<img src={plus} alt='' className='w-[1rem]' />
+						</Transition>
+					) : (
+						<Transition
+							show={isOpen}
+							enter='transition-opacity ease-in-out duration-300 delay-75'
+							enterFrom='opacity-0'
+							enterTo='opacity-100'
+							leave='transition-opacity ease-in-out duration-300 delay-75'
+							leaveFrom='opacity-100'
+							leaveTo='opacity-0'>
+							<img
+								src={cross}
+								alt=''
+								className='w-[1rem]'
+							/>
+						</Transition>
+					)}
+				</span>
+			</div>
 			<Transition
-			//   show={!isOpen}
-			  enter='transition-opacity ease-in-out duration-400 delay-75'
-			  enterFrom='opacity-0'
-			  enterTo='opacity-100'
-			  leave='transition-opacity ease-in-out duration-400 delay-75'
-			  leaveFrom='opacity-100'
-			  leaveTo='opacity-0'
-			>
-			  <img src={plus} alt='' className='w-[1rem]' />
+				show={faqId === props.id && isOpen}
+				enter='transition-opacity ease-in-out duration-400'
+				enterFrom='opacity-0'
+				enterTo='opacity-100'
+				leave='transition-opacity ease-in-out duration-400'
+				leaveFrom='opacity-100'
+				leaveTo='opacity-0'>
+				<div className='m2:px-8 py-5 m1:px-4 m1:text-[.7rem] m2:text-[.8rem]  m3:text-[.85rem] md:text-[.9rem] font-SFPro'>
+					{props.answer}
+				</div>
 			</Transition>
-			<Transition
-			//   show={isOpen}
-			  enter='transition-opacity ease-in-out duration-300 delay-75'
-			  enterFrom='opacity-0'
-			  enterTo='opacity-100'
-			  leave='transition-opacity ease-in-out duration-300 delay-75'
-			  leaveFrom='opacity-100'
-			  leaveTo='opacity-0'
-			>
-			  <img src={cross} alt='' className='w-[1rem]' />
-			</Transition>
-		  </span>
 		</div>
-		<Transition
-		//   show={isOpen}
-		  enter='transition-opacity ease-in-out duration-400'
-		  enterFrom='opacity-0'
-		  enterTo='opacity-100'
-		  leave='transition-opacity ease-in-out duration-400'
-		  leaveFrom='opacity-100'
-		  leaveTo='opacity-0'
-		>
-		  <div className='m2:px-8 py-5 m1:px-4 m1:text-[.7rem] m2:text-[.8rem] m3:text-[.85rem] md:text-[.9rem] font-SFPro'>
-			{props.answer}
-		  </div>
-		</Transition>
-	  </div>
 	);
-  };
-  
+};
 export default function Faq() {
 	return (
 		<section className='xl:w-[80vw] 2xl:w-[80vw] mx-auto  '>
@@ -167,12 +167,3 @@ export default function Faq() {
 		</section>
 	);
 }
-// import React from 'react'
-
-// const faq = () => {
-//   return (
-// 	<div>faq.component</div>
-//   )
-// }
-
-// export default faq

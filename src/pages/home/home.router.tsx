@@ -560,7 +560,7 @@ export default function Home() {
 			<Hero2 />
 			<CreativeServices />
 			<MembershipLevels />
-			{/* <Faq /> */}
+			<Faq /> 
 			<Footer />
 			{/* {console.log('home', clicked)} */}
 		</>

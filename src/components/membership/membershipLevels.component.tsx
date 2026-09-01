@@ -176,8 +176,8 @@ const MembershipLevels = () => {
 		}px`;
 	}, []);
 	return (
-		<>
-			<div id='plans' className=' ' />
+		< div className='border-2 border-red-500'>
+			<div id='plans' className='  ' />
 			<section className='xl:w-[80vw] 2xl:w-[80vw] mx-auto'>
 				<div className='m-auto flex flex-col gap-12 px-6 md:px-14  xl:px-4  py-[3rem] md:py-10'>
 					<div>
@@ -193,34 +193,6 @@ const MembershipLevels = () => {
 						{datas.map((data: MembershipItemsProps) => (
 							<MembershipItem1 {...data} />
 						))}
-						{/* <div className='flex flex-col justify-between lg:items-start lg:p-8  lg:justify-between bg-black3 rounded-2xl items-center p-4 pt-8 gap-4 lg:gap-2 || w-full sm:w-[48%] md:w-[49%] min-h-[18rem]'>
-							<div className='flex flex-col justify-center lg:items-start  lg:justify-between bg-black3 rounded-2xl items-center  gap-4 lg:gap-2 || w-full'>
-								<h1 className='text-xl md:text-3xl text-center lg:text-left'>
-									Website Development
-								</h1>
-								<div className='flex flex-col gap-1 items-center md:block font-SFPro m1:text-[.6rem] text-[.6rem] lg:text-[1rem]  text-center lg:items-start'>
-									<div className='small_text  xl:text-[1rem]  flex flex-col items-center lg:text-left'>
-										Build your website faster with our
-										website development service.
-									</div>
-								</div>
-								<div className='flex flex-col gap-1 items-center lg:items-start  '>
-									<h1 className='text-2xl md:text-3xl'>
-										$625/m
-									</h1>
-
-									<span className='small_text text-grey-light pb-3 '>
-										Requires subscription
-									</span>
-								</div>
-							</div>
-
-							<Button
-								text='Add on'
-								className='bg-color-secondary btn_base w-full'
-								onClick={() => {}}
-							/>
-						</div> */}
 						<div className='text-left flex flex-col justify-center   lg:justify-around bg-black3 rounded-2xl items-center lg:items-start p-4 py-8  gap-4 lg:gap-2 lg:p-8 || w-full sm:w-[48%] md:w-[49%] h-fit lg:min-h-[20rem] cg'>
 							<div className='flex flex-col gap-4 lg:gap-2  items-start '>
 								<h1 className='text-xl md:text-3xl '>
@@ -270,12 +242,13 @@ const MembershipLevels = () => {
 						</div>
 					</div>
 
-					<div className=' flex-col ctnr gap-3  '>
+					<div className=' flex-col ctnr gap- '>
 						{datas.map((data, index) => (
 							<div key={index} className={`m${index + 1}`}>
 								<MembershipItem {...data} />
 							</div>
 						))}
+						{/* what's included */}
 						<div className='m5'>
 							<div className='flex flex-col  items-center lg:items-start   bg-black3 rounded-2xl  p-4 pt-8  gap-4 lg:gap-2 lg:p-8  h-full '>
 								<h1 className='text-xl md:text-3xl m1:text-center lg:text-start  '>
@@ -299,8 +272,9 @@ const MembershipLevels = () => {
 								</div>
 							</div>
 						</div>
-						<div className='m6'>
+						<div className='m6 '>
 							<div className='flex flex-row  bg-black3 rounded-2xl  h-full w-full p-4 pt-8   lg:py-8  lg:px-8'>
+								{/* book a call content */}
 								<div className='flex flex-col  gap-4 '>
 									<h1 className='text-xl md:text-3xl m1:text-center lg:text-start'>
 										Book a call
@@ -313,6 +287,8 @@ const MembershipLevels = () => {
 									</div>
 								</div>
 
+								{/* book a call button */}
+
 								<div className=''>
 									<Button
 										text='Book a call'
@@ -324,12 +300,13 @@ const MembershipLevels = () => {
 										}
 									/>
 								</div>
+
 							</div>
 						</div>
 					</div>
 				</div>
 			</section>
-		</>
+		</div>
 	);
 };
 

@@ -2,8 +2,8 @@
 	.ctnr {
 		display: grid;
 		grid-auto-columns: 1fr;
-		grid-template-columns: 1fr 1fr 1fr;
-		grid-template-rows: 1.1fr 0.4fr 0.8fr;
+		grid-template-columns: 1fr 1fr ;
+		grid-template-rows: 1.1fr 0.4fr;
 		gap: 0.5rem 0.5rem;
 		grid-template-areas:
 			'm1 m2 m3'
