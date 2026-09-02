@@ -70,6 +70,15 @@ export const addServiceToCart = async (token: string | null, serviceId: string) 
   return parseCartResponse(res.data);
 };
 
+export const addCartItem = async (token: string | null, serviceId: string) => {
+  const res = await axios.post(
+    `${apiUrl}/cart/items`,
+    { service_id: serviceId },
+    getAuthConfig(token),
+  );
+  return parseCartResponse(res.data);
+};
+
 export const removeServiceFromCart = async (token: string | null, serviceId: string) => {
   const res = await axios.delete(`${apiUrl}/cart/items/${serviceId}`, getAuthConfig(token));
   return parseCartResponse(res.data);

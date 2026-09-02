@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import { Button } from '../../../components/dashboard/ui/button';
 import {
@@ -22,7 +21,7 @@ import {
 import { Loader2, ShoppingCart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { loadRazorpay, type RazorpayResponse } from '../../../lib/razorpay';
+import { checkoutService } from '../../../lib/razorpay-checkout';
 import { addServiceToCart } from '../../../lib/cart-api';
 import {
   fetchIndividualService,
@@ -31,8 +30,6 @@ import {
   type IndividualService,
 } from '../../../lib/individual-services-api';
 import { setCart } from '../../../redux/cartSlice';
-
-const apiUrl = import.meta.env.VITE_API_URL;
 
 const Store = () => {
   const dispatch = useDispatch();
@@ -87,71 +84,18 @@ const Store = () => {
     }
 
     setIsProcessing(service._id);
-    try {
-      const orderRes = await axios.post(
-        `${apiUrl}/payments/razorpay/create-order/service`,
-        { service_id: service._id },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          withCredentials: true,
-        },
-      );
-
-      const orderData = orderRes.data;
-      if (!orderData.success) throw new Error(orderData.message || 'Order creation failed');
-
-      const isLoaded = await loadRazorpay();
-      if (!isLoaded) {
-        toast.error('Razorpay SDK failed to load');
-        return;
-      }
-
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: orderData.order.amount,
-        currency: orderData.order.currency,
-        name: 'DesignJockey',
-        description: service.name,
-        order_id: orderData.order.id,
-        handler: async (response: RazorpayResponse) => {
-          try {
-            const verifyRes = await axios.post(
-              `${apiUrl}/payments/razorpay/verify`,
-              {
-                type: 'service',
-                service_id: service._id,
-                service_ids: [service._id],
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              },
-              {
-                headers: { Authorization: `Bearer ${token}` },
-                withCredentials: true,
-              },
-            );
-
-            if (verifyRes.data.success) {
-              toast.success(`Purchased ${service.name} successfully`);
-              setSelectedService(null);
-            } else {
-              toast.error(verifyRes.data.message || 'Payment verification failed');
-            }
-          } catch {
-            toast.error('Error verifying payment');
-          } finally {
-            setIsProcessing(null);
-          }
-        },
-        theme: { color: '#C4FE01' },
-        modal: { ondismiss: () => setIsProcessing(null) },
-      };
-
-      new window.Razorpay(options).open();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error.message || 'Payment failed');
-      setIsProcessing(null);
-    }
+    await checkoutService(token, service._id, service.name, {
+      onSuccess: () => {
+        toast.success(`Purchased ${service.name} successfully`);
+        setSelectedService(null);
+        setIsProcessing(null);
+      },
+      onDismiss: () => setIsProcessing(null),
+      onError: (message) => {
+        toast.error(message);
+        setIsProcessing(null);
+      },
+    });
   };
 
   const handleAddToCart = async (service: IndividualService) => {

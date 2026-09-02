@@ -161,10 +161,18 @@ const AdminProjects: React.FC = () => {
                   {filteredProjects.map((project) => (
                     <tr key={project._id} className="group hover:bg-white/5 transition-colors">
                       <td className="py-4">
-                        <p className="text-sm font-bold tracking-tight">{project.title}</p>
-                        <p className="text-[9px] text-[#c5fb00] font-bold uppercase tracking-widest">
-                          {project.service_id?.name || "Service"}
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/admin/projects/${project._id}`)}
+                          className="text-left group/title"
+                        >
+                          <p className="text-sm font-bold tracking-tight group-hover/title:text-[#c5fb00] transition-colors">
+                            {project.title}
+                          </p>
+                          <p className="text-[9px] text-[#c5fb00] font-bold uppercase tracking-widest">
+                            {project.service_id?.name || "Service"}
+                          </p>
+                        </button>
                       </td>
                       <td className="py-4 text-sm font-medium">{project.client_id?.name || "N/A"}</td>
                       <td className="py-4 text-sm text-muted-foreground">
@@ -187,7 +195,7 @@ const AdminProjects: React.FC = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-card border-border">
-                              <DropdownMenuItem onClick={() => navigate(`/admin/briefs/${project._id}`)}>
+                              <DropdownMenuItem onClick={() => navigate(`/admin/projects/${project._id}`)}>
                                 Details
                               </DropdownMenuItem>
                               <DropdownMenuItem

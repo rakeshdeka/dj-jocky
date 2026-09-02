@@ -1,146 +1,177 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import Search from '../../../components/dashboard/ui/Search';
-import BriefsGrid from "../../../components/dashboard/dashboard/BriefsGrid";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../../../components/dashboard/ui/sheet";
+import BriefsGrid from '../../../components/dashboard/dashboard/BriefsGrid';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../../../components/dashboard/ui/sheet';
 import { toast } from 'sonner';
 import { Button } from '../../../components/dashboard/ui/button';
 import { RootState } from '../../../store/store';
-import { FileText, Download, UploadCloud } from 'lucide-react';
+import { UploadCloud } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../components/dashboard/ui/select';
+import {
+  fetchDesignerBriefs,
+  startDesignerWork,
+  type DesignerBrief,
+} from '../../../lib/designer-api';
+import { fetchBriefFilesBundle, uploadDeliveryFiles, type BriefFilesBundle } from '../../../lib/files-api';
+import BriefFilesPanel from '../../../components/dashboard/briefs/BriefFilesPanel';
+import SubmitWorkSheet from '../../../components/dashboard/designer/SubmitWorkSheet';
 
 const Briefs = () => {
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  const { token, user } = useSelector((state: RootState) => state.auth);
-  const role = user?.role;
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [briefs, setBriefs] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [briefs, setBriefs] = useState<DesignerBrief[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null);
 
-  const [selectedBrief, setSelectedBrief] = useState<any>(null);
-  const [files, setFiles] = useState<any[]>([]);
+  const [selectedBrief, setSelectedBrief] = useState<{ id: string; title: string } | null>(null);
+  const [briefFiles, setBriefFiles] = useState<BriefFilesBundle>({
+    reference_files: [],
+    delivery_files: [],
+  });
   const [isFilesLoading, setIsFilesLoading] = useState(false);
 
-  const [uploadModal, setUploadModal] = useState<any>(null);
+  const [uploadModal, setUploadModal] = useState<{ id: string; title: string } | null>(null);
+  const [submitWorkModal, setSubmitWorkModal] = useState<{ id: string; title: string } | null>(null);
   const [uploadFile, setUploadFile] = useState<FileList | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  /* ================= FETCH BRIEFS ================= */
-  const fetchBriefs = async () => {
+  const loadBriefs = useCallback(async () => {
+    if (!token) return;
     try {
       setIsLoading(true);
-
-      const endpoint =
-        role === "client"
-          ? `${apiUrl}/client/briefs`
-          : `${apiUrl}/designer/briefs`;
-
-      const res = await axios.get(endpoint, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      setBriefs(res.data.items || []);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to load briefs");
+      setBriefs(
+        await fetchDesignerBriefs(token, {
+          status: statusFilter === 'all' ? undefined : statusFilter,
+          priority: priorityFilter === 'all' ? undefined : priorityFilter,
+        }),
+      );
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load briefs');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token, statusFilter, priorityFilter]);
 
-  /* ================= FETCH FILES ================= */
-  const fetchFiles = async (id: string) => {
+  const loadFiles = async (id: string) => {
+    if (!token) return;
     try {
       setIsFilesLoading(true);
-
-      const res = await axios.get(`${apiUrl}/files/briefs/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      setFiles(res.data.files || []);
-    } catch (error: any) {
-      toast.error("Failed to fetch files");
+      setBriefFiles(await fetchBriefFilesBundle(token, id));
+    } catch {
+      toast.error('Failed to fetch files');
     } finally {
       setIsFilesLoading(false);
     }
   };
 
   useEffect(() => {
-    if (token && role) fetchBriefs();
-  }, [token, role]);
+    loadBriefs();
+  }, [loadBriefs]);
 
-  /* ================= UPLOAD ================= */
   const handleUpload = async () => {
-    if (!uploadFile || uploadFile.length === 0) {
-      return toast.error("Select files");
+    if (!token || !uploadModal || !uploadFile || uploadFile.length === 0) {
+      return toast.error('Select files');
     }
-
-    const formData = new FormData();
-    Array.from(uploadFile).forEach((file) => {
-      formData.append("files", file);
-    });
 
     try {
       setIsUploading(true);
-
-      await axios.post(
-        `${apiUrl}/files/briefs/${uploadModal.id}/delivery`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data"
-          }
-        }
-      );
-
-      toast.success("Files uploaded successfully");
+      await uploadDeliveryFiles(token, uploadModal.id, uploadFile);
+      toast.success('Files uploaded successfully');
       setUploadModal(null);
       setUploadFile(null);
-
-    } catch {
-      toast.error("Upload failed");
+      await loadBriefs();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Upload failed');
     } finally {
       setIsUploading(false);
     }
   };
 
+  const handleStartWork = async (briefId: string) => {
+    if (!token) return;
+    try {
+      setUpdatingBriefId(briefId);
+      await startDesignerWork(token, briefId);
+      toast.success('Work started');
+      await loadBriefs();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to start work');
+    } finally {
+      setUpdatingBriefId(null);
+    }
+  };
+
+  const handleSubmitWorkOpen = (briefId: string, title: string) => {
+    setSubmitWorkModal({ id: briefId, title });
+  };
+
   return (
     <MainLayout>
-
-      {/* HEADER */}
       <div className="mb-8">
         <h1 className="text-sm font-bold mb-1 tracking-[0.2em]">ALL BRIEFS</h1>
         <p className="text-muted-foreground text-sm">
-          Manage your design requests and assets
+          Assigned briefs, deliverables, and status updates
         </p>
       </div>
-      <div className="mb-6">
-        <Search onSearch={setSearchQuery} />
-      </div>
 
+      <div className="mb-6 flex flex-col lg:flex-row gap-3">
+        <div className="flex-1">
+          <Search onSearch={setSearchQuery} />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full lg:w-[180px] h-9 text-xs">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="assigned">Assigned</SelectItem>
+            <SelectItem value="in_progress">In progress</SelectItem>
+            <SelectItem value="under_review">Under review</SelectItem>
+            <SelectItem value="revision">Revision</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-full lg:w-[180px] h-9 text-xs">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All priorities</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <BriefsGrid
         briefs={briefs}
         searchQuery={searchQuery}
         sortBy="date-created"
         isLoading={isLoading}
-        onDeleted={(id) =>
-          setBriefs(prev => prev.filter(b => b._id !== id))
-        }
+        onDeleted={(id) => setBriefs((prev) => prev.filter((b) => b._id !== id))}
         onViewFiles={(id, title) => {
           setSelectedBrief({ id, title });
-          fetchFiles(id);
+          loadFiles(id);
         }}
         role="designer"
-        onUploadDelivery={(id, title) =>
-          setUploadModal({ id, title })
-        }
+        onUploadDelivery={(id, title) => setUploadModal({ id, title })}
+        onStartWork={handleStartWork}
+        onSubmitWork={handleSubmitWorkOpen}
+        updatingBriefId={updatingBriefId}
       />
 
-      {/* ================= VIEW FILES ================= */}
       <Sheet open={!!selectedBrief} onOpenChange={() => setSelectedBrief(null)}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
@@ -148,64 +179,38 @@ const Briefs = () => {
             <SheetDescription>{selectedBrief?.title}</SheetDescription>
           </SheetHeader>
 
-          {isFilesLoading ? (
-            <div className="text-center py-20">Loading...</div>
-          ) : files.length > 0 ? (
-            <div className="mt-6 space-y-3">
-              {files.map((file) => (
-                <div
-                  key={file._id}
-                  className="flex items-center justify-between p-3 border rounded-md hover:border-[#C4FE01] transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-muted rounded">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        {file.original_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {file.file_type || "file"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <a
-                    href={file.file_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-2 hover:bg-[#C4FE01] rounded"
-                  >
-                    <Download className="w-4 h-4" />
-                  </a>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-20 border-dashed border rounded-md">
-              <p className="text-sm text-muted-foreground">
-                No files available
-              </p>
-            </div>
-          )}
+          <div className="mt-6">
+            <BriefFilesPanel
+              referenceFiles={briefFiles.reference_files}
+              deliveryFiles={briefFiles.delivery_files}
+              isLoading={isFilesLoading}
+            />
+          </div>
         </SheetContent>
       </Sheet>
 
-      {/* ================= UPLOAD ================= */}
+      <SubmitWorkSheet
+        open={!!submitWorkModal}
+        briefId={submitWorkModal?.id ?? null}
+        briefTitle={submitWorkModal?.title}
+        token={token}
+        onClose={() => setSubmitWorkModal(null)}
+        onSuccess={loadBriefs}
+      />
+
       <Sheet open={!!uploadModal} onOpenChange={() => setUploadModal(null)}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Upload Delivery</SheetTitle>
-            <SheetDescription>{uploadModal?.title}</SheetDescription>
+            <SheetTitle>Add Delivery Files</SheetTitle>
+            <SheetDescription>
+              Upload extra deliverables without changing brief status — {uploadModal?.title}
+            </SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-4">
-
-            {/* Upload Box */}
             <label className="flex flex-col items-center justify-center border-2 border-dashed rounded-md p-6 cursor-pointer hover:border-[#C4FE01] transition">
               <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
-              <p className="text-sm">Click to upload files</p>
+              <p className="text-sm">Click to upload delivery files</p>
               <input
                 type="file"
                 multiple
@@ -214,11 +219,10 @@ const Briefs = () => {
               />
             </label>
 
-            {/* Selected Files */}
             {uploadFile && (
               <div className="space-y-2 max-h-40 overflow-auto">
-                {Array.from(uploadFile).map((file, i) => (
-                  <div key={i} className="text-sm border p-2 rounded">
+                {Array.from(uploadFile).map((file) => (
+                  <div key={file.name} className="text-sm border p-2 rounded">
                     {file.name}
                   </div>
                 ))}
@@ -230,12 +234,11 @@ const Briefs = () => {
               disabled={isUploading}
               className="w-full bg-[#C4FE01] text-black"
             >
-              {isUploading ? "Uploading..." : "Upload Files"}
+              {isUploading ? 'Uploading...' : 'Upload Files'}
             </Button>
           </div>
         </SheetContent>
       </Sheet>
-
     </MainLayout>
   );
 };

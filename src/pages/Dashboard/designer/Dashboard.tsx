@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { useSelector } from 'react-redux';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/dashboard/ui/card';
@@ -10,63 +9,14 @@ import ProjectList, { type Project, type ProjectStatus } from '../../../componen
 import DesignerStats from '../../../components/dashboard/designer/DesignerStats';
 import { Calendar, Clock, ArrowUpRight, Loader2 } from 'lucide-react';
 import type { RootState } from '../../../store/store';
+import {
+  fetchDesignerDashboard,
+  type DesignerBrief,
+  type DesignerBriefStatus,
+  type DesignerMeeting,
+} from '../../../lib/designer-api';
 
-const apiUrl = import.meta.env.VITE_API_URL;
-
-type BriefStatus =
-  | 'not_assigned'
-  | 'assigned'
-  | 'in_progress'
-  | 'under_review'
-  | 'revision'
-  | 'completed';
-
-interface DashboardCounts {
-  assigned: number;
-  in_progress: number;
-  under_review: number;
-  revision: number;
-  completed: number;
-  active: number;
-  total: number;
-}
-
-interface ApiProject {
-  _id: string;
-  title: string;
-  status: BriefStatus;
-  priority: 'low' | 'medium' | 'high';
-  client_id?: { _id?: string; name?: string; email?: string };
-  service_id?: { _id?: string; name?: string; price?: number };
-  delivery_date?: string;
-  updatedAt: string;
-}
-
-interface ApiMeeting {
-  _id: string;
-  date: string;
-  time: string;
-  meeting_type: string;
-  status: string;
-  agenda?: string;
-  client_id?: { name?: string; email?: string };
-  admin_id?: { name?: string; email?: string };
-  createdAt: string;
-}
-
-interface DashboardResponse {
-  success: boolean;
-  counts: DashboardCounts;
-  new_projects: ApiProject[];
-  new_meetings: ApiMeeting[];
-}
-
-const getAuthConfig = (token: string | null) => ({
-  headers: { Authorization: `Bearer ${token}` },
-  withCredentials: true,
-});
-
-const mapStatus = (status: BriefStatus): ProjectStatus => {
+const mapStatus = (status: DesignerBriefStatus): ProjectStatus => {
   switch (status) {
     case 'in_progress':
       return 'in-progress';
@@ -109,18 +59,18 @@ const formatMeetingDateTime = (date: string, time: string) => {
   });
 };
 
-const mapProject = (item: ApiProject): Project => ({
+const mapProject = (item: DesignerBrief): Project => ({
   id: item._id,
   name: item.title,
   client: item.client_id?.name || 'Unknown client',
   clientId: item.client_id?._id || '',
   status: mapStatus(item.status),
-  deadline: item.delivery_date || item.updatedAt,
+  deadline: item.delivery_date || item.updatedAt || '',
   progress: 0,
   type: item.service_id?.name || 'Design',
   priority: item.priority,
   unreadMessages: 0,
-  lastUpdate: formatRelativeTime(item.updatedAt),
+  lastUpdate: item.updatedAt ? formatRelativeTime(item.updatedAt) : '',
   thumbnail: '',
   tasks: [],
 });
@@ -130,8 +80,8 @@ const DesignerDashboard = () => {
   const { token } = useSelector((state: RootState) => state.auth);
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [meetings, setMeetings] = useState<ApiMeeting[]>([]);
-  const [counts, setCounts] = useState<DashboardCounts>({
+  const [meetings, setMeetings] = useState<DesignerMeeting[]>([]);
+  const [counts, setCounts] = useState({
     assigned: 0,
     in_progress: 0,
     under_review: 0,
@@ -143,35 +93,25 @@ const DesignerDashboard = () => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     if (!token) return;
 
     try {
       setIsLoading(true);
-      const res = await axios.get<DashboardResponse>(
-        `${apiUrl}/designer/dashboard`,
-        getAuthConfig(token),
-      );
-
-      const data = res.data;
-      console.log('[DesignerDashboard] Loaded dashboard:', data);
-
-      if (data.success) {
-        setCounts(data.counts);
-        setProjects((data.new_projects || []).map(mapProject));
-        setMeetings(data.new_meetings || []);
-      }
-    } catch (error: any) {
-      console.error('[DesignerDashboard] Failed to load dashboard:', error);
-      toast.error(error?.response?.data?.message || 'Failed to load dashboard');
+      const data = await fetchDesignerDashboard(token);
+      setCounts(data.counts);
+      setProjects((data.new_projects || []).map(mapProject));
+      setMeetings(data.new_meetings || []);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load dashboard');
     } finally {
       setIsLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
+    loadDashboard();
+  }, [loadDashboard]);
 
   const handleProjectSelect = (project: Project) => {
     setSelectedProject(project);
@@ -195,7 +135,7 @@ const DesignerDashboard = () => {
           <div>
             <h1 className="text-sm font-bold mb-1 tracking-[0.2em]">DASHBOARD</h1>
             <p className="text-muted-foreground text-sm">
-              Manage your projects, tasks, and client interactions
+              Brief counts, recent projects, and upcoming meetings
             </p>
           </div>
         </div>
@@ -207,6 +147,22 @@ const DesignerDashboard = () => {
         completedCount={counts.completed}
         unreadMessagesCount={counts.active}
       />
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-4">
+        {[
+          { label: 'Assigned', value: counts.assigned },
+          { label: 'Revision', value: counts.revision },
+          { label: 'Active', value: counts.active },
+          { label: 'Total', value: counts.total },
+        ].map((item) => (
+          <Card key={item.label} className="bg-secondary/20 border-border">
+            <CardContent className="p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{item.label}</p>
+              <p className="text-xl font-bold">{item.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 font-sans">
         <div className="lg:col-span-1 space-y-6">
@@ -221,13 +177,13 @@ const DesignerDashboard = () => {
           <Card className="bg-secondary/30 border-border">
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle>My Calendar</CardTitle>
+                <CardTitle>Recent Meetings</CardTitle>
                 <Button variant="outline" size="sm" onClick={() => navigate('/designer/meetings')}>
                   <Calendar className="h-4 w-4 mr-2" />
                   View All
                 </Button>
               </div>
-              <CardDescription>Upcoming deadlines and meetings</CardDescription>
+              <CardDescription>Latest 5 meetings from your dashboard feed</CardDescription>
             </CardHeader>
             <CardContent className="pb-4">
               <div className="space-y-4">

@@ -14,6 +14,9 @@ interface BriefsGridProps {
   onViewFiles: (id: string, title: string) => void;
   role: "client" | "designer";
   onUploadDelivery: (id: string, title: string) => void;
+  onStartWork?: (id: string) => void;
+  onSubmitWork?: (id: string, title: string) => void;
+  updatingBriefId?: string | null;
 }
 
 const BriefsGrid: React.FC<BriefsGridProps> = ({
@@ -24,7 +27,10 @@ const BriefsGrid: React.FC<BriefsGridProps> = ({
   onDeleted,
   onViewFiles,
   role,
-  onUploadDelivery
+  onUploadDelivery,
+  onStartWork,
+  onSubmitWork,
+  updatingBriefId = null,
 }) => {
   const { token } = useSelector((state: RootState) => state.auth);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -90,6 +96,9 @@ const BriefsGrid: React.FC<BriefsGridProps> = ({
           onViewFiles={onViewFiles}
           role={role}
           onUploadDelivery={onUploadDelivery}
+          onStartWork={onStartWork}
+          onSubmitWork={onSubmitWork}
+          isUpdatingStatus={updatingBriefId === brief._id}
         />
       ))}
 

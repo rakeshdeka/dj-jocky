@@ -79,6 +79,7 @@ const AdminLogin = lazy(() => import('./pages/Dashboard/admin/AdminLogin'))
 const AdminDashboard = lazy(() => import('./pages/Dashboard/admin/Dashboard'))
 const AdminUsers = lazy(() => import('./pages/Dashboard/admin/Users'))
 const AdminProjects = lazy(() => import('./pages/Dashboard/admin/Projects'))
+const AdminProjectDetail = lazy(() => import('./pages/Dashboard/admin/AdminProjectDetail'))
 const AdminSubscriptions = lazy(() => import('./pages/Dashboard/admin/Subscriptions'))
 // const AdminAnalytics = lazy(() => import('./pages/Dashboard/admin/Analytics'))
 // const AdminMessages = lazy(() => import('./pages/Dashboard/admin/Messages'))
@@ -177,9 +178,10 @@ const routes = createBrowserRouter(
       <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><AdminUsers /></ProtectedRoute>} />
       <Route path="/admin/users/add" element={<ProtectedRoute requiredRole="admin"><AddUser /></ProtectedRoute>} />
       <Route path="/admin/projects" element={<ProtectedRoute requiredRole="admin"><AdminProjects /></ProtectedRoute>} />
-      <Route path="/admin/projects/:briefId/messages" element={<ProtectedRoute requiredRole="admin"><AdminProjectChat /></ProtectedRoute>} />
-      <Route path="/admin/projects/messages" element={<ProtectedRoute requiredRole="admin"><AdminProjectsMessage /></ProtectedRoute>} />
       <Route path="/admin/projects/add" element={<ProtectedRoute requiredRole="admin"><AddProject /></ProtectedRoute>} />
+      <Route path="/admin/projects/messages" element={<ProtectedRoute requiredRole="admin"><AdminProjectsMessage /></ProtectedRoute>} />
+      <Route path="/admin/projects/:briefId/messages" element={<ProtectedRoute requiredRole="admin"><AdminProjectChat /></ProtectedRoute>} />
+      <Route path="/admin/projects/:briefId" element={<ProtectedRoute requiredRole="admin"><AdminProjectDetail /></ProtectedRoute>} />
       <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="admin"><AdminSubscriptions /></ProtectedRoute>} />
       <Route path="/admin/meetings" element={<ProtectedRoute requiredRole="admin"><AdminMeetings /></ProtectedRoute>} />
       <Route path="/admin/meetings/new" element={<ProtectedRoute requiredRole="admin"><AdminMeetingBooking /></ProtectedRoute>} />

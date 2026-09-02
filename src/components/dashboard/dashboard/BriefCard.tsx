@@ -1,6 +1,7 @@
 import React from 'react'
 import { MoreHorizontal, Edit2, Trash2, FileText, Loader2, MessageSquare } from 'lucide-react'
 import { useNavigate } from "react-router-dom"
+import DesignerBriefActions from '../designer/DesignerBriefActions'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,9 @@ interface BriefCardProps {
   onViewFiles: (id: string, title: string) => void
   role: "client" | "designer"
   onUploadDelivery: (id: string, title: string) => void
+  onStartWork?: (id: string) => void
+  onSubmitWork?: (id: string, title: string) => void
+  isUpdatingStatus?: boolean
 }
 
 const BriefCard: React.FC<BriefCardProps> = ({
@@ -32,7 +36,10 @@ const BriefCard: React.FC<BriefCardProps> = ({
   onDelete,
   onViewFiles,
   role,
-  onUploadDelivery
+  onUploadDelivery,
+  onStartWork,
+  onSubmitWork,
+  isUpdatingStatus = false,
 }) => {
   const navigate = useNavigate()
 
@@ -98,7 +105,7 @@ const BriefCard: React.FC<BriefCardProps> = ({
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onUploadDelivery(id, title)}>
-                    📤 Upload Delivery
+                    📤 Add Delivery Files
                   </DropdownMenuItem>
                 </>
               )}
@@ -108,9 +115,21 @@ const BriefCard: React.FC<BriefCardProps> = ({
         </div>
       </div>
 
-      <div className="p-4">
-        <span className="text-[10px] text-[#C4FE01] font-bold uppercase">{category}</span>
-        <h3 className="font-medium truncate">{title}</h3>
+      <div className="p-4 space-y-3">
+        <div>
+          <span className="text-[10px] text-[#C4FE01] font-bold uppercase">{category}</span>
+          <h3 className="font-medium truncate">{title}</h3>
+        </div>
+
+        {role === 'designer' && (onStartWork || onSubmitWork) && (
+          <DesignerBriefActions
+            status={status}
+            isUpdating={isUpdatingStatus}
+            onStartWork={onStartWork ? () => onStartWork(id) : undefined}
+            onSubmitWork={onSubmitWork ? () => onSubmitWork(id, title) : undefined}
+            className="w-full"
+          />
+        )}
       </div>
     </div>
   )

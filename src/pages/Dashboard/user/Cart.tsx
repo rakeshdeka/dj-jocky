@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import { Button } from '../../../components/dashboard/ui/button';
 import { Card, CardContent } from '../../../components/dashboard/ui/card';
 import { Badge } from '../../../components/dashboard/ui/badge';
 import { Loader2, ShoppingBag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { loadRazorpay, type RazorpayResponse } from '../../../lib/razorpay';
 import {
   fetchCart,
   removeServiceFromCart,
@@ -16,10 +14,9 @@ import {
   getServiceImage,
   type CartData,
 } from '../../../lib/cart-api';
+import { checkoutCart } from '../../../lib/razorpay-checkout';
 import { clearCart, setCart } from '../../../redux/cartSlice';
 import type { RootState } from '../../../store/store';
-
-const apiUrl = import.meta.env.VITE_API_URL;
 
 const emptyCart: CartData = {
   items: [],
@@ -79,81 +76,28 @@ const Cart = () => {
   };
 
   const handleCheckout = async () => {
-    if (cartData.item_count === 0) {
+    if (!token || cartData.item_count === 0) {
       toast.error('Your cart is empty');
       return;
     }
 
     setIsCheckingOut(true);
-    try {
-      const orderRes = await axios.post(
-        `${apiUrl}/payments/razorpay/create-order/cart`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          withCredentials: true,
-        }
-      );
+    const serviceIds = cartItems.map((item) => item.service_id);
 
-      const orderData = orderRes.data;
-      if (!orderData.success) throw new Error(orderData.message || 'Order creation failed');
-
-      const isLoaded = await loadRazorpay();
-      if (!isLoaded) {
-        toast.error('Razorpay SDK failed to load');
-        return;
-      }
-
-      const serviceIds = cartItems.map((item) => item.service_id);
-
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: orderData.order.amount,
-        currency: orderData.order.currency,
-        name: 'DesignJockey',
-        description: 'Cart checkout',
-        order_id: orderData.order.id,
-        handler: async (response: RazorpayResponse) => {
-          try {
-            const verifyRes = await axios.post(
-              `${apiUrl}/payments/razorpay/verify`,
-              {
-                type: 'cart',
-                service_id: serviceIds[0] || '',
-                service_ids: serviceIds,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              },
-              {
-                headers: { Authorization: `Bearer ${token}` },
-                withCredentials: true,
-              }
-            );
-
-            if (verifyRes.data.success) {
-              toast.success('Payment successful');
-              await clearServerCart(token);
-              dispatch(clearCart());
-              setCartData(emptyCart);
-            } else {
-              toast.error(verifyRes.data.message || 'Payment verification failed');
-            }
-          } catch {
-            toast.error('Error verifying payment');
-          } finally {
-            setIsCheckingOut(false);
-          }
-        },
-        theme: { color: '#C4FE01' },
-        modal: { ondismiss: () => setIsCheckingOut(false) },
-      };
-
-      new window.Razorpay(options).open();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error.message || 'Checkout failed');
-      setIsCheckingOut(false);
-    }
+    await checkoutCart(token, serviceIds, {
+      onSuccess: async () => {
+        toast.success('Payment successful');
+        await clearServerCart(token);
+        dispatch(clearCart());
+        setCartData(emptyCart);
+        setIsCheckingOut(false);
+      },
+      onDismiss: () => setIsCheckingOut(false),
+      onError: (message) => {
+        toast.error(message);
+        setIsCheckingOut(false);
+      },
+    });
   };
 
   return (

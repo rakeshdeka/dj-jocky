@@ -4,6 +4,31 @@ export interface RazorpayResponse {
   razorpay_signature: string;
 }
 
+export type RazorpayCheckoutOptions = Record<string, unknown>;
+
+/**
+ * NPCI deprecated manual UPI Collect (VPA entry) from Feb 28, 2026.
+ * Prefer UPI Intent on mobile and UPI QR on desktop.
+ * @see https://razorpay.com/docs/payments/payment-methods/upi/
+ */
+export const getRazorpayUpiComplianceOptions = (): RazorpayCheckoutOptions => ({
+  config: {
+    display: {
+      hide: [{ method: 'upi', flow: 'collect' }],
+      preferences: {
+        show_default_blocks: true,
+      },
+    },
+  },
+  method: {
+    upi: {
+      collect: false,
+      intent: true,
+      qr: true,
+    },
+  },
+});
+
 declare global {
   interface Window {
     Razorpay: new (options: Record<string, unknown>) => { open: () => void };

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { BriefFile } from './files-api';
 
 const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -21,8 +22,10 @@ export type Brief = {
   delivery_date?: string;
   thumbnail_url?: string;
   service_id?: string | { _id?: string; name?: string };
-  client_id?: { _id?: string; name?: string };
-  designer_id?: { _id?: string; name?: string } | null;
+  client_id?: { _id?: string; name?: string; email?: string };
+  designer_id?: { _id?: string; name?: string; email?: string } | null;
+  reference_files?: BriefFile[];
+  delivery_files?: BriefFile[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -70,13 +73,21 @@ const parseBriefResponse = (data: any): Brief => {
     throw new Error(data?.message || 'Brief not found');
   }
 
-  return normalizeBrief(brief);
+  return normalizeBrief(brief, data);
 };
 
-export const normalizeBrief = (item: any): Brief => ({
+export const normalizeBrief = (item: any, envelope?: Record<string, unknown>): Brief => ({
   ...item,
   service_id: item.service_id,
+  reference_files: item.reference_files ?? envelope?.reference_files,
+  delivery_files: item.delivery_files ?? envelope?.delivery_files,
 });
+
+export const formatBriefStatus = (status?: string) =>
+  (status || 'not_assigned').replace(/_/g, ' ');
+
+export const formatBriefPriority = (priority?: string) =>
+  priority ? priority.charAt(0).toUpperCase() + priority.slice(1) : 'Medium';
 
 export const briefToFormValues = (brief: Brief): BriefFormValues => ({
   title: brief.title || '',

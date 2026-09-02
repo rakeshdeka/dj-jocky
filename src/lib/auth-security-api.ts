@@ -60,12 +60,21 @@ export const changeAuthPassword = async (
   oldPassword: string,
   newPassword: string,
 ) => {
-  const res = await axios.post(
-    `${apiUrl}/auth/change-password`,
-    { oldPassword, newPassword },
-    getAuthConfig(token),
-  );
-  return res.data;
+  const payload = { currentPassword: oldPassword, newPassword };
+  try {
+    const res = await axios.post(`${apiUrl}/profile/change-password`, payload, getAuthConfig(token));
+    return res.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      const res = await axios.post(
+        `${apiUrl}/auth/change-password`,
+        { oldPassword, newPassword },
+        getAuthConfig(token),
+      );
+      return res.data;
+    }
+    throw error;
+  }
 };
 
 export const validateNewPassword = (

@@ -1,342 +1,252 @@
-
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { toast } from 'sonner';
+import { AlertCircle, CheckCircle, Loader2, Package, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Package, CheckCircle, AlertCircle, Zap, Clock, Calendar } from 'lucide-react';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import {
+  Dialog,
+  DialogContent,
   DialogDescription,
-  DialogFooter 
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '../ui/dialog';
-import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Label } from '../ui/label';
-// import { Switch } from '../ui/switch';
-import { toast } from 'sonner';
-
-type PlanType = 'starter' | 'core' | 'growth';
+import { Switch } from '../ui/switch';
+import type { RootState } from '../../../store/store';
+import {
+  cancelSubscription,
+  fetchActiveSubscription,
+  formatPlanPrice,
+  type ActiveSubscriptionResponse,
+} from '../../../lib/plans-api';
 
 const SubscriptionDetails = () => {
-  const [currentPlan, setCurrentPlan] = useState<PlanType>('core');
-  const [hasWebsiteAddon, setHasWebsiteAddon] = useState(true);
-  const [isChangeDialogOpen, setIsChangeDialogOpen] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>(currentPlan);
-  const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false);
+  const { token } = useSelector((state: RootState) => state.auth);
+  const [data, setData] = useState<ActiveSubscriptionResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
-  
-  const plans = {
-    starter: {
-      name: 'Starter',
-      price: 833,
-      updateTime: '48-hour',
-      pausePerMonth: 1,
-      features: [
-        'Unlimited briefs',
-        'Unlimited brands',
-        'Unlimited file requests',
-        'Easy payments',
-        'Pause/cancel anytime'
-      ]
-    },
-    core: {
-      name: 'Core',
-      price: 933,
-      updateTime: '24-hour',
-      pausePerMonth: 2,
-      features: [
-        'Unlimited briefs',
-        'Unlimited brands',
-        'Unlimited file requests',
-        'Easy payments',
-        'Pause/cancel anytime',
-        'Priority support'
-      ]
-    },
-    growth: {
-      name: 'Growth',
-      price: 1033,
-      updateTime: '4-hour',
-      pausePerMonth: 2,
-      features: [
-        'Unlimited briefs',
-        'Unlimited brands',
-        'Unlimited file requests',
-        'Easy payments',
-        'Pause/cancel anytime',
-        'Priority support',
-        'Advanced analytics',
-        'Team collaboration'
-      ]
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const loadSubscription = useCallback(async () => {
+    if (!token) return;
+    try {
+      setIsLoading(true);
+      setData(await fetchActiveSubscription(token));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load subscription');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadSubscription();
+  }, [loadSubscription]);
+
+  const plan = data?.plan || data?.activePlan;
+  const subscription = data?.subscription;
+  const expiryDate = subscription?.expiry_date
+    ? new Date(subscription.expiry_date).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
+
+  const handleCancelSubscription = async () => {
+    if (!token) return;
+    try {
+      setIsCancelling(true);
+      await cancelSubscription(token, { cancel_at_period_end: cancelAtPeriodEnd });
+      toast.success(
+        cancelAtPeriodEnd
+          ? 'Subscription will cancel at the end of the billing period'
+          : 'Subscription cancelled',
+      );
+      setIsCancelDialogOpen(false);
+      await loadSubscription();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel subscription');
+    } finally {
+      setIsCancelling(false);
     }
   };
-  
-  const websiteAddon = {
-    name: 'Website Development',
-    price: 625,
-    features: [
-      'Professional web design',
-      'Mobile optimization',
-      'SEO best practices',
-      'Regular updates',
-      'Technical support'
-    ]
-  };
-  
-  const nextBillingDate = new Date();
-  nextBillingDate.setDate(nextBillingDate.getDate() + 15);
-  
-  const handleChangePlan = () => {
-    setCurrentPlan(selectedPlan);
-    setIsChangeDialogOpen(false);
-    toast.success(`Your subscription has been updated to ${plans[selectedPlan].name}`);
-  };
-  
-  const handleToggleAddon = () => {
-    setHasWebsiteAddon(!hasWebsiteAddon);
-    toast.success(hasWebsiteAddon 
-      ? 'Website Development add-on removed' 
-      : 'Website Development add-on added to your subscription'
-    );
-  };
-  
-  const handlePauseSubscription = () => {
-    setIsPauseDialogOpen(false);
-    toast.success('Your subscription has been paused');
-  };
-  
-  const handleCancelSubscription = () => {
-    setIsCancelDialogOpen(false);
-    toast.success('Your subscription has been canceled');
-  };
-  
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-  
-  return (
-    <div>
-      <div className="space-y-8">
-        <h2 className="text-2xl font-semibold border-b border-border pb-4">Subscription Details</h2>
-        
-        <div className="">
-          <Card className="bg-secondary/30 border-border col-span-1 md:col-span-2">
-            <CardContent className="p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-[#C4FE01]/20 flex items-center justify-center">
-                    <Package className="h-5 w-5 text-[#C4FE01]" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-lg">{plans[currentPlan].name} Plan</h3>
-                      <Badge variant="outline" className="bg-[#C4FE01]/10 text-[#C4FE01] border-[#C4FE01]/30">
-                        Active
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      ${plans[currentPlan].price}/month
-                    </p>
-                  </div>
-                </div>
-                
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setSelectedPlan(currentPlan);
-                    setIsChangeDialogOpen(true);
-                  }}
-                >
-                  Change Plan
-                </Button>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex items-center gap-2 bg-background/20 p-3 rounded-lg">
-                  <Clock className="h-5 w-5 text-[#C4FE01]" />
-                  <div>
-                    <p className="text-sm font-medium">{plans[currentPlan].updateTime} Updates</p>
-                    <p className="text-xs text-muted-foreground">Turnaround time</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 bg-background/20 p-3 rounded-lg">
-                  <Calendar className="h-5 w-5 text-[#C4FE01]" />
-                  <div>
-                    <p className="text-sm font-medium">{plans[currentPlan].pausePerMonth} Pauses/Month</p>
-                    <p className="text-xs text-muted-foreground">Subscription flexibility</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                <h4 className="font-medium">What's Included:</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {plans[currentPlan].features.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span className="text-sm">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Next Billing Date</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(nextBillingDate)}
-                    </p>
-                  </div>
-                  
-                  <div className="flex gap-3">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setIsPauseDialogOpen(true)}
-                    >
-                      Pause Subscription
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      onClick={() => setIsCancelDialogOpen(true)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Loading subscription...
       </div>
-      
-      {/* Change Plan Dialog */}
-      <Dialog open={isChangeDialogOpen} onOpenChange={setIsChangeDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Change Subscription Plan</DialogTitle>
-            <DialogDescription>
-              Select the plan that works best for your needs
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <RadioGroup value={selectedPlan} onValueChange={(value) => setSelectedPlan(value as PlanType)}>
-              {(Object.keys(plans) as PlanType[]).map((plan) => (
-                <div 
-                  key={plan} 
-                  className={`p-4 rounded-lg border mb-4 cursor-pointer transition-all ${
-                    selectedPlan === plan 
-                      ? 'bg-primary/10 border-primary' 
-                      : 'bg-background/50 border-border hover:border-primary/30'
-                  }`}
-                  onClick={() => setSelectedPlan(plan)}
-                >
-                  <div className="flex items-start">
-                    <RadioGroupItem value={plan} id={`plan-${plan}`} className="mt-1" />
-                    <div className="ml-3 flex-1">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor={`plan-${plan}`} className="font-medium text-lg">
-                          {plans[plan].name}
-                        </Label>
-                        <span className="font-bold">${plans[plan].price}/month</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-primary" />
-                          <span className="text-sm">{plans[plan].updateTime} Updates</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-primary" />
-                          <span className="text-sm">{plans[plan].pausePerMonth} Pauses/Month</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+    );
+  }
+
+  if (!plan || !subscription) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-semibold border-b border-border pb-4">Subscription Details</h2>
+        <Card className="border-dashed">
+          <CardContent className="p-8 text-center space-y-4">
+            <Package className="h-10 w-10 mx-auto text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">You do not have an active subscription.</p>
+            <Button asChild className="bg-[#C4FE01] text-black hover:bg-[#C4FE01]/90">
+              <Link to="/client/plans">Browse Plans</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
+        <h2 className="text-2xl font-semibold">Subscription Details</h2>
+        <Button variant="ghost" size="icon" onClick={loadSubscription}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <Card className="bg-secondary/30 border-border">
+        <CardContent className="p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-[#C4FE01]/20 flex items-center justify-center">
+                <Package className="h-5 w-5 text-[#C4FE01]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-medium text-lg">{plan.name}</h3>
+                  <Badge variant="outline" className="bg-[#C4FE01]/10 text-[#C4FE01] border-[#C4FE01]/30">
+                    {subscription.status || 'Active'}
+                  </Badge>
                 </div>
-              ))}
-            </RadioGroup>
+                <p className="text-sm text-muted-foreground">{formatPlanPrice(plan)}</p>
+              </div>
+            </div>
+
+            <Button asChild variant="outline">
+              <Link to="/client/plans">Change / Switch Plan</Link>
+            </Button>
           </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsChangeDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleChangePlan}
-              disabled={selectedPlan === currentPlan}
-            >
-              Confirm Change
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Pause Subscription Dialog */}
-      <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Pause Subscription</DialogTitle>
-          </DialogHeader>
-          
-          <div className="py-4 space-y-4">
-            <p>
-              Are you sure you want to pause your subscription? You have {plans[currentPlan].pausePerMonth} pause(s) available this month.
-            </p>
-            
-            <div className="flex items-center p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <AlertCircle className="h-5 w-5 text-amber-500 mr-2 flex-shrink-0" />
-              <p className="text-sm">
-                While paused, you won't be able to submit new briefs or request changes. Your subscription will automatically resume after 30 days.
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-lg bg-background/20 p-3">
+              <p className="text-xs text-muted-foreground">Expiry</p>
+              <p className="text-sm font-medium">{expiryDate || '—'}</p>
+            </div>
+            <div className="rounded-lg bg-background/20 p-3">
+              <p className="text-xs text-muted-foreground">Auto-renew</p>
+              <p className="text-sm font-medium">{subscription.auto_renew ? 'Enabled' : 'Disabled'}</p>
+            </div>
+            <div className="rounded-lg bg-background/20 p-3">
+              <p className="text-xs text-muted-foreground">Max active requests</p>
+              <p className="text-sm font-medium">
+                {plan.max_active_requests == null ? 'Unlimited' : plan.max_active_requests}
               </p>
             </div>
           </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPauseDialogOpen(false)}>
-              Cancel
+
+          {plan.features && plan.features.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="font-medium">Plan features</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {plan.features.map((feature, index) => (
+                  <div key={index} className="flex items-start gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm">
+                      {feature.label}
+                      {feature.value ? ` — ${feature.value}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(data.included_services?.length || data.individual_services?.length) ? (
+            <div className="space-y-3">
+              {data.included_services && data.included_services.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">Included services</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {data.included_services.map((service) => (
+                      <Badge key={service._id || service.name} variant="secondary" className="text-xs">
+                        {service.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.individual_services && data.individual_services.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">Individually purchased</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {data.individual_services.map((service) => (
+                      <Badge key={service._id || service.name} variant="outline" className="text-xs">
+                        {service.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <div className="pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="font-medium">Cancel subscription</p>
+              <p className="text-sm text-muted-foreground">
+                Cancelling also stops Razorpay auto-renew when linked.
+              </p>
+            </div>
+            <Button variant="destructive" onClick={() => setIsCancelDialogOpen(true)}>
+              Cancel Subscription
             </Button>
-            <Button variant="default" onClick={handlePauseSubscription}>
-              Pause Subscription
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Cancel Subscription Dialog */}
+          </div>
+        </CardContent>
+      </Card>
+
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cancel Subscription</DialogTitle>
+            <DialogDescription>
+              Choose whether to cancel immediately or at the end of your current billing period.
+            </DialogDescription>
           </DialogHeader>
-          
+
           <div className="py-4 space-y-4">
-            <p>
-              Are you sure you want to cancel your subscription? This will take effect at the end of your current billing period.
-            </p>
-            
-            <div className="flex items-center p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
-              <AlertCircle className="h-5 w-5 text-destructive mr-2 flex-shrink-0" />
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div>
+                <Label className="text-sm">Cancel at period end</Label>
+                <p className="text-xs text-muted-foreground">Keep access until {expiryDate || 'expiry'}</p>
+              </div>
+              <Switch checked={cancelAtPeriodEnd} onCheckedChange={setCancelAtPeriodEnd} />
+            </div>
+
+            <div className="flex items-start gap-2 p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <p className="text-sm">
-                After cancellation, you'll lose access to all DesignJockey services on {formatDate(nextBillingDate)}. Any pending work will be completed before then.
+                {cancelAtPeriodEnd
+                  ? 'Your subscription stays active until the current period ends.'
+                  : 'Your subscription will be cancelled immediately and access may end right away.'}
               </p>
             </div>
           </div>
-          
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCancelDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsCancelDialogOpen(false)} disabled={isCancelling}>
               Keep Subscription
             </Button>
-            <Button variant="destructive" onClick={handleCancelSubscription}>
-              Cancel Subscription
+            <Button variant="destructive" onClick={handleCancelSubscription} disabled={isCancelling}>
+              {isCancelling && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Confirm Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

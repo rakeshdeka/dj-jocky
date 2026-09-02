@@ -16,6 +16,13 @@ import { toast } from 'sonner';
 import MeetingRequestForm from '../../components/dashboard/meetings/MeetingRequestForm';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../../store/store';
+import {
+  fetchDesignerBriefs,
+  fetchDesignerBrief,
+  startDesignerWork,
+} from '../../lib/designer-api';
+import DesignerBriefActions from '../../components/dashboard/designer/DesignerBriefActions';
+import SubmitWorkSheet from '../../components/dashboard/designer/SubmitWorkSheet';
 
 export interface Message {
   _id: string;
@@ -59,21 +66,25 @@ const Progress: React.FC = () => {
   const [isLoadingBriefs, setIsLoadingBriefs] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileViewOpen, setMobileViewOpen] = useState(false);
   const [showMeetingRequestDialog, setShowMeetingRequestDialog] = useState(false);
+  const [submitWorkOpen, setSubmitWorkOpen] = useState(false);
 
   const isClient = user?.role === 'client';
+  const isDesigner = user?.role === 'designer';
 
   const fetchBriefs = useCallback(async () => {
     try {
       setIsLoadingBriefs(true);
-      const endpoint =
-        user?.role === 'designer'
-          ? `${apiUrl}/designer/briefs`
-          : `${apiUrl}/briefs/me`;
-      const res = await axios.get(endpoint, {
+      if (isDesigner && token) {
+        setBriefs(await fetchDesignerBriefs(token));
+        return;
+      }
+
+      const res = await axios.get(`${apiUrl}/briefs/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setBriefs(res.data.items || []);
@@ -82,7 +93,7 @@ const Progress: React.FC = () => {
     } finally {
       setIsLoadingBriefs(false);
     }
-  }, [apiUrl, token, user?.role]);
+  }, [apiUrl, token, isDesigner]);
 
   useEffect(() => {
     if (token) fetchBriefs();
@@ -130,7 +141,41 @@ const Progress: React.FC = () => {
   const handleSelectBrief = async (brief: Brief) => {
     setSelectedBrief(brief);
     setMobileViewOpen(true);
+
+    if (isDesigner && token) {
+      try {
+        const detail = await fetchDesignerBrief(token, brief._id);
+        setBriefDetails({
+          _id: detail._id,
+          title: detail.title,
+          status: detail.status,
+          priority: detail.priority,
+        });
+        if (detail.status_progress) {
+          setStatusProgress(detail.status_progress as StatusProgress);
+        }
+      } catch {
+        // Fall back to chat endpoint data below.
+      }
+    }
+
     await fetchMessages(brief._id);
+  };
+
+  const handleStartWork = async () => {
+    if (!token || !selectedBrief) return;
+    try {
+      setIsUpdatingStatus(true);
+      await startDesignerWork(token, selectedBrief._id);
+      toast.success('Work started');
+      await fetchBriefs();
+      setSelectedBrief((prev) => (prev ? { ...prev, status: 'in_progress' } : prev));
+      await fetchMessages(selectedBrief._id);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to start work');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   const handleSendMessage = async (briefId: string, content: string, files?: File[]) => {
@@ -282,6 +327,22 @@ const Progress: React.FC = () => {
 
         <div className={`flex-1 h-full flex flex-col bg-card/20 rounded-md border border-border overflow-hidden ${mobileViewOpen ? 'block' : 'hidden md:block'}`}>
           {selectedBrief ? (
+            <>
+              {isDesigner && (
+                <div className="p-4 border-b border-border flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Brief status</p>
+                    <p className="text-sm font-medium capitalize">{selectedBrief.status.replace(/_/g, ' ')}</p>
+                  </div>
+                  <DesignerBriefActions
+                    status={selectedBrief.status}
+                    isUpdating={isUpdatingStatus}
+                    onStartWork={handleStartWork}
+                    onSubmitWork={() => setSubmitWorkOpen(true)}
+                  />
+                </div>
+              )}
+              <div className="flex-1 min-h-0">
             <ConversationView
               conversation={{
                 id: selectedBrief._id,
@@ -301,13 +362,15 @@ const Progress: React.FC = () => {
               statusProgress={statusProgress}
               isLoading={isLoadingMessages}
               isSending={isSendingMessage}
-              showProgressBar={isClient}
+              showProgressBar={isClient || isDesigner}
               showScheduleMeet={isClient}
               canCompose={isClient}
               onSendMessage={(id: string, content: string, files?: File[]) => handleSendMessage(id, content, files)}
               onBack={handleBackToList}
               onRequestMeeting={isClient ? () => setShowMeetingRequestDialog(true) : undefined}
             />
+              </div>
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center p-6">
               <div className="w-16 h-16 bg-secondary/30 rounded-full flex items-center justify-center mb-4">
@@ -321,6 +384,21 @@ const Progress: React.FC = () => {
           )}
         </div>
       </div>
+
+      <SubmitWorkSheet
+        open={submitWorkOpen}
+        briefId={selectedBrief?._id ?? null}
+        briefTitle={selectedBrief?.title}
+        token={token}
+        onClose={() => setSubmitWorkOpen(false)}
+        onSuccess={async () => {
+          await fetchBriefs();
+          if (selectedBrief) {
+            setSelectedBrief((prev) => (prev ? { ...prev, status: 'under_review' } : prev));
+            await fetchMessages(selectedBrief._id);
+          }
+        }}
+      />
 
       <Dialog open={showMeetingRequestDialog} onOpenChange={setShowMeetingRequestDialog}>
         <DialogContent className="sm:max-w-[500px] bg-card border-border">
