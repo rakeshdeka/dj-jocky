@@ -1,18 +1,15 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell,
   ChevronDown,
   ShoppingCart,
   User,
-  PauseCircle,
   Settings,
   LogOut,
-  Menu,
   Inbox,
-  CheckCheck
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import {
@@ -38,7 +35,6 @@ import {
 } from "../ui/popover";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { ScrollArea } from "../ui/scroll-area";
 import axios from 'axios';
 import { useSelector, useDispatch } from 'react-redux';
@@ -47,10 +43,15 @@ import { logout } from '../../../redux/authSlice';
 import type { UserRole } from '../../../redux/authSlice';
 import { setCart } from '../../../redux/cartSlice';
 import { fetchCart } from '../../../lib/cart-api';
+import {
+  fetchNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  type AppNotification,
+} from '../../../lib/notifications-api';
 import logo from '../../../assets/svgs/logo.svg';
 
 const Navbar: React.FC = () => {
-  const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
@@ -63,7 +64,7 @@ const Navbar: React.FC = () => {
   const [user, setUser] = useState<any>(null);
 
   // Notification States matching your items: [] structure
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const role = authUser?.role as UserRole | undefined;
@@ -88,31 +89,22 @@ const Navbar: React.FC = () => {
   }, [token, apiUrl]);
 
   /* ================= FETCH NOTIFICATIONS ================= */
-  const fetchNotifications = async () => {
+  const loadNotifications = async () => {
     if (!token) return;
     try {
-      const res = await axios.get(`${apiUrl}/notifications`, {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true,
-      });
-
-      const items = res.data.items || [];
+      const items = await fetchNotifications(token);
       setNotifications(items);
-
-      // Check for unread based on read_at being null
-      const unread = items.filter((n: any) => n.read_at === null).length;
-      setUnreadCount(unread);
+      setUnreadCount(getUnreadCount(items));
     } catch (err) {
-      console.error("Notification fetch error", err);
+      console.error('Notification fetch error', err);
     }
   };
 
   useEffect(() => {
-    fetchNotifications();
-    // Refresh every 2 minutes
-    const interval = setInterval(fetchNotifications, 120000);
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 120000);
     return () => clearInterval(interval);
-  }, [token, apiUrl]);
+  }, [token]);
 
   /* ================= FETCH CART COUNT ================= */
   useEffect(() => {
@@ -131,19 +123,15 @@ const Navbar: React.FC = () => {
   /* ================= MARK AS READ ================= */
   const markAsRead = async (id: string) => {
     try {
-      // Using your specified endpoint: /notifications/{id}/read
-      await axios.patch(`${apiUrl}/notifications/${id}/read`, {}, {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true
-      });
-
-      // Update local state immediately for better UX
-      setNotifications(prev =>
-        prev.map(n => n._id === id ? { ...n, read_at: new Date() } : n)
+      await markNotificationRead(token, id);
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n._id === id ? { ...n, read_at: new Date().toISOString() } : n,
+        ),
       );
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (err) {
-      console.error("Failed to mark notification as read");
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch {
+      console.error('Failed to mark notification as read');
     }
   };
 
@@ -270,7 +258,8 @@ const Navbar: React.FC = () => {
                 <Button
                   variant="ghost"
                   className="w-full text-[10px] font-bold uppercase tracking-widest h-8"
-                  onClick={() => navigate(`/${role}/notifications`)}
+                  onClick={() => role && navigate(`/${role}/notifications`)}
+                  disabled={!role}
                 >
                   View History
                 </Button>

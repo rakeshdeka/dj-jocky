@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import axios from "axios"
 import { useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
 import MainLayout from "../../../components/dashboard/layout/MainLayout"
@@ -13,14 +12,17 @@ import { Loader2 } from "lucide-react"
 import type { RootState } from "../../../store/store"
 import {
   canEditBrief,
+  canReviewBrief,
+  canClientSeeDeliveryFiles,
+  acceptBrief,
   fetchMyBriefs,
+  getClientKanbanStatus,
   updateBriefPriority,
   type Brief,
   type BriefPriority,
   type BriefStatus,
 } from "../../../lib/briefs-api"
-
-const apiUrl = import.meta.env.VITE_API_URL
+import ClientDeliveryReviewSheet from "../../../components/dashboard/briefs/ClientDeliveryReviewSheet"
 
 const STATUS_COLUMNS: { id: BriefStatus; label: string; accentColor: string }[] = [
   { id: "not_assigned", label: "Not Assigned", accentColor: "bg-gray-400" },
@@ -41,11 +43,6 @@ const PRIORITY_EDITABLE_STATUSES: BriefStatus[] = ["not_assigned", "assigned", "
 
 const canChangePriority = (status: BriefStatus) => PRIORITY_EDITABLE_STATUSES.includes(status)
 
-const getAuthConfig = (token: string | null) => ({
-  headers: { Authorization: `Bearer ${token}` },
-  withCredentials: true,
-})
-
 const AssignJobs = () => {
   const navigate = useNavigate()
   const { token } = useSelector((state: RootState) => state.auth)
@@ -53,6 +50,11 @@ const AssignJobs = () => {
   const [briefs, setBriefs] = useState<Brief[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null)
+  const [reviewBrief, setReviewBrief] = useState<{
+    id: string
+    title: string
+    mode: "review" | "revision"
+  } | null>(null)
 
   const fetchBriefs = useCallback(async () => {
     if (!token) return
@@ -83,8 +85,9 @@ const AssignJobs = () => {
     )
 
     briefs.forEach((brief) => {
-      const status = STATUS_COLUMNS.some((column) => column.id === brief.status)
-        ? brief.status
+      const kanbanStatus = getClientKanbanStatus(brief.status)
+      const status = STATUS_COLUMNS.some((column) => column.id === kanbanStatus)
+        ? kanbanStatus
         : "not_assigned"
       grouped[status].push(brief)
     })
@@ -142,9 +145,14 @@ const AssignJobs = () => {
       setUpdatingBriefId(briefId)
 
       if (toStatus === "completed") {
-        await axios.post(`${apiUrl}/briefs/${briefId}/accept`, {}, getAuthConfig(token))
+        await acceptBrief(token, briefId)
       } else if (toStatus === "revision") {
-        await axios.post(`${apiUrl}/briefs/${briefId}/request-revision`, {}, getAuthConfig(token))
+        setReviewBrief({
+          id: briefId,
+          title: brief.title,
+          mode: "revision",
+        })
+        return
       }
 
       updateBriefInState(briefId, { status: toStatus })
@@ -163,11 +171,22 @@ const AssignJobs = () => {
 
   const handleTaskClick = (id: string) => {
     const brief = briefs.find((item) => item._id === id)
-    if (!brief || !canEditBrief(brief.status)) {
+    if (!brief) return
+
+    if (canReviewBrief(brief.status)) {
+      setReviewBrief({ id: brief._id, title: brief.title, mode: "review" })
+      return
+    }
+
+    if (!canEditBrief(brief.status)) {
       toast.error("This brief can no longer be edited")
       return
     }
     navigate(`/client/edit-brief/${id}`)
+  }
+
+  const handleReviewSuccess = (briefId: string, newStatus: "completed" | "revision") => {
+    updateBriefInState(briefId, { status: newStatus })
   }
 
   const getCardProps = (brief: Brief) => ({
@@ -186,7 +205,7 @@ const AssignJobs = () => {
       <div className="mb-5">
         <h1 className="text-sm font-bold tracking-[0.2em]">ASSIGN JOBS</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Scroll horizontally to view all stages. Use the card menu for priority, or drag under-review briefs to accept or request revision.
+          Scroll horizontally to view all stages. Click under-review briefs to review delivery files, accept work, or request changes.
         </p>
       </div>
 
@@ -216,8 +235,14 @@ const AssignJobs = () => {
                     <TaskCard
                       {...getCardProps(brief)}
                       index={index}
+                      draggable={canReviewBrief(brief.status)}
                       onDragStart={(e) => handleDragStart(e, brief._id)}
                       onClick={() => handleTaskClick(brief._id)}
+                      onReview={
+                        canReviewBrief(brief.status)
+                          ? () => setReviewBrief({ id: brief._id, title: brief.title, mode: "review" })
+                          : undefined
+                      }
                       onPriorityChange={
                         canChangePriority(brief.status)
                           ? (priority) => handlePriorityChange(brief._id, priority)
@@ -231,6 +256,18 @@ const AssignJobs = () => {
           </div>
         </div>
       )}
+
+      <ClientDeliveryReviewSheet
+        open={!!reviewBrief}
+        briefId={reviewBrief?.id ?? null}
+        briefTitle={reviewBrief?.title}
+        token={token}
+        initialMode={reviewBrief?.mode}
+        onClose={() => setReviewBrief(null)}
+        onSuccess={(newStatus) => {
+          if (reviewBrief) handleReviewSuccess(reviewBrief.id, newStatus)
+        }}
+      />
     </MainLayout>
   )
 }

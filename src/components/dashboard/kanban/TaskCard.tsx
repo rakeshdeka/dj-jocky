@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-import { Calendar, MoreHorizontal } from "lucide-react"
+import { Calendar, ClipboardCheck, MoreHorizontal } from "lucide-react"
+import { Button } from "../ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,8 +18,10 @@ interface TaskCardProps {
   category: string
   priority?: string
   completedAt?: string
+  draggable?: boolean
   onDragStart?: (e: React.DragEvent) => void
   onClick?: () => void
+  onReview?: () => void
   onPriorityChange?: (priority: "low" | "medium" | "high") => void
   index?: number
 }
@@ -35,16 +38,18 @@ const TaskCard: React.FC<TaskCardProps> = ({
   category,
   priority,
   completedAt,
+  draggable = true,
   onDragStart = () => {},
   onClick = () => {},
+  onReview,
   onPriorityChange,
   index,
 }) => {
   return (
     <div
       className="group relative rounded-lg border border-border/60 bg-card/80 p-2.5 cursor-pointer hover:border-border hover:bg-card transition-colors"
-      draggable
-      onDragStart={onDragStart}
+      draggable={draggable}
+      onDragStart={draggable ? onDragStart : undefined}
       onClick={onClick}
       data-task-id={id}
       data-task-index={index}
@@ -107,6 +112,21 @@ const TaskCard: React.FC<TaskCardProps> = ({
           </span>
         )}
       </div>
+
+      {onReview && (
+        <Button
+          type="button"
+          size="sm"
+          className="mt-2 w-full h-7 text-[10px] bg-[#C4FE01] hover:bg-[#b2e600] text-black"
+          onClick={(e) => {
+            e.stopPropagation()
+            onReview()
+          }}
+        >
+          <ClipboardCheck className="h-3 w-3 mr-1.5" />
+          Review Delivery
+        </Button>
+      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import MainLayout from "../../../components/dashboard/layout/MainLayout"
 import { Card, CardContent, CardHeader } from "../../../components/dashboard/ui/card"
 import { Button } from "../../../components/dashboard/ui/button"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 import { Input } from "../../../components/dashboard/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../components/dashboard/ui/select"
 import {
@@ -14,12 +14,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../../components/dashboard/ui/dropdown-menu"
-import { Filter, MoreVertical, Plus, SearchIcon, MessageSquare, Loader2 } from "lucide-react"
-import axios from "axios"
+import { Filter, MoreVertical, Plus, SearchIcon, MessageSquare, Loader2, ShieldCheck } from "lucide-react"
 import { useSelector } from "react-redux"
-import { RootState } from "../../../store/store"
 import { toast } from "sonner"
-import AssignProjectModal from "../../../components/dashboard/admin/modals/AssignProjectModal"
+import { RootState } from "../../../store/store"
+import { fetchAdminBriefs, formatBriefStatus } from "../../../lib/briefs-api"
+import { Badge } from "../../../components/dashboard/ui/badge"
 
 interface AdminBrief {
   _id: string
@@ -32,28 +32,26 @@ interface AdminBrief {
 }
 
 const AdminProjects: React.FC = () => {
-  const apiUrl = import.meta.env.VITE_API_URL
   const { token } = useSelector((state: RootState) => state.auth)
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [briefs, setBriefs] = useState<AdminBrief[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState(
+    () => (location.state as { statusFilter?: string })?.statusFilter || "all",
+  )
   const [priorityFilter] = useState("all")
-
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
-  const [selectedProject, setSelectedProject] = useState<AdminBrief | null>(null)
 
   const fetchBriefs = async () => {
     try {
       setIsLoading(true)
-      const res = await axios.get(`${apiUrl}/admin/briefs`, {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true,
+      const items = await fetchAdminBriefs(token, {
+        status: statusFilter === "all" ? undefined : statusFilter,
       })
-      setBriefs(res.data.items || [])
+      setBriefs(items as AdminBrief[])
     } catch {
       toast.error("Failed to load briefs")
     } finally {
@@ -63,24 +61,7 @@ const AdminProjects: React.FC = () => {
 
   useEffect(() => {
     if (token) fetchBriefs()
-  }, [token])
-
-  const handleAssignProject = async (projectId: string, designerId: string) => {
-    try {
-      const response = await axios.patch(
-        `${apiUrl}/admin/briefs/${projectId}/assign-designer`,
-        { designer_id: designerId },
-        { headers: { Authorization: `Bearer ${token}` } },
-      )
-      if (response.data.success) {
-        toast.success("Designer assigned successfully")
-        fetchBriefs()
-        setIsAssignModalOpen(false)
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Assignment failed")
-    }
-  }
+  }, [token, statusFilter])
 
   const filteredProjects = briefs.filter((p) => {
     const matchesSearch =
@@ -128,8 +109,12 @@ const AdminProjects: React.FC = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="pending_admin_review">Pending Admin Review</SelectItem>
+                <SelectItem value="not_assigned">Not Assigned</SelectItem>
                 <SelectItem value="assigned">Assigned</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="under_review">Under Review</SelectItem>
+                <SelectItem value="revision">Revision</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
@@ -152,6 +137,7 @@ const AdminProjects: React.FC = () => {
                 <thead>
                   <tr className="text-left border-b border-border/50 text-[10px] font-bold uppercase text-muted-foreground tracking-[0.2em]">
                     <th className="pb-4">Brief Title</th>
+                    <th className="pb-4">Status</th>
                     <th className="pb-4">Client Name</th>
                     <th className="pb-4">Designer</th>
                     <th className="pb-4 text-right">Actions</th>
@@ -173,6 +159,18 @@ const AdminProjects: React.FC = () => {
                             {project.service_id?.name || "Service"}
                           </p>
                         </button>
+                      </td>
+                      <td className="py-4">
+                        {project.status === "pending_admin_review" ? (
+                          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[9px] uppercase tracking-wider">
+                            <ShieldCheck className="h-3 w-3 mr-1" />
+                            Review Needed
+                          </Badge>
+                        ) : (
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            {formatBriefStatus(project.status, "admin")}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 text-sm font-medium">{project.client_id?.name || "N/A"}</td>
                       <td className="py-4 text-sm text-muted-foreground">
@@ -199,10 +197,7 @@ const AdminProjects: React.FC = () => {
                                 Details
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => {
-                                  setSelectedProject(project)
-                                  setIsAssignModalOpen(true)
-                                }}
+                                onClick={() => navigate(`/admin/projects/${project._id}/assign-designer`)}
                               >
                                 {project.designer_id ? "Change Designer" : "Assign"}
                               </DropdownMenuItem>
@@ -218,13 +213,6 @@ const AdminProjects: React.FC = () => {
           </div>
         </CardContent>
       </Card>
-
-      <AssignProjectModal
-        isOpen={isAssignModalOpen}
-        onClose={() => setIsAssignModalOpen(false)}
-        project={selectedProject}
-        onAssign={handleAssignProject}
-      />
     </MainLayout>
   )
 }

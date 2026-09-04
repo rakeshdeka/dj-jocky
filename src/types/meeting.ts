@@ -20,7 +20,7 @@ export interface Meeting {
   endTime?: string;
   agenda?: string;
   status: MeetingStatus;
-  discordLink?: string;
+  meetingLink?: string;
   declineReason?: string;
   createdAt?: string;
 }

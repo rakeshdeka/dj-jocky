@@ -19,6 +19,7 @@ import {
 const mapStatus = (status: DesignerBriefStatus): ProjectStatus => {
   switch (status) {
     case 'in_progress':
+    case 'pending_admin_review':
       return 'in-progress';
     case 'under_review':
     case 'revision':
@@ -84,6 +85,7 @@ const DesignerDashboard = () => {
   const [counts, setCounts] = useState({
     assigned: 0,
     in_progress: 0,
+    pending_admin_review: 0,
     under_review: 0,
     revision: 0,
     completed: 0,
@@ -143,7 +145,7 @@ const DesignerDashboard = () => {
 
       <DesignerStats
         inProgressCount={counts.in_progress}
-        reviewCount={counts.under_review}
+        reviewCount={counts.pending_admin_review + counts.under_review}
         completedCount={counts.completed}
         unreadMessagesCount={counts.active}
       />
@@ -151,6 +153,8 @@ const DesignerDashboard = () => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-4">
         {[
           { label: 'Assigned', value: counts.assigned },
+          { label: 'Admin Review', value: counts.pending_admin_review },
+          { label: 'Client Review', value: counts.under_review },
           { label: 'Revision', value: counts.revision },
           { label: 'Active', value: counts.active },
           { label: 'Total', value: counts.total },

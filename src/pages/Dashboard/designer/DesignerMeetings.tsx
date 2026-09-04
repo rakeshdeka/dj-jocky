@@ -167,7 +167,7 @@ export default function DesignerMeetings() {
                       onClick={() => handleJoin(m.meeting_link)}
                       className="w-full text-[10px] font-bold uppercase h-9 rounded-md bg-transparent border border-border/50 hover:bg-[#C4FE01] hover:text-black hover:border-transparent transition-all tracking-wider"
                     >
-                      {isFinished ? "Session Ended" : "Join Call"} <ExternalLink className="ml-1.5 h-3 w-3" />
+                      {isFinished ? "Session Ended" : "Join Google Meet"} <ExternalLink className="ml-1.5 h-3 w-3" />
                     </Button>
                   </div>
                 </Card>
@@ -229,7 +229,7 @@ export default function DesignerMeetings() {
                 disabled={!selectedMeeting.meeting_link}
                 className="w-full bg-[#C4FE01] text-black hover:bg-[#b2e600] font-bold h-10 rounded-md uppercase text-[11px] tracking-wider"
               >
-                <Video className="mr-2 h-3.5 w-3.5" /> Start Video Conference
+                <Video className="mr-2 h-3.5 w-3.5" /> Join Google Meet
               </Button>
             </>
           )}

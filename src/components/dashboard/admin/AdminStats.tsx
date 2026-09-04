@@ -1,12 +1,13 @@
 import React from 'react';
 import { Card, CardContent } from '../ui/card';
-import { BarChart2, CheckCircle2, DollarSign, Users } from 'lucide-react';
+import { BarChart2, CheckCircle2, DollarSign, ShieldCheck, Users } from 'lucide-react';
 
 export interface AdminDashboardStats {
   totalUsers: number;
   totalClients: number;
   totalDesigners: number;
   pendingBriefs: number;
+  pendingAdminReview: number;
   totalBriefs: number;
   completedBriefs: number;
   totalRevenue: number;
@@ -34,6 +35,15 @@ const STAT_CARDS: {
     iconColorClass: 'text-[#c5fb00]',
     format: (s) => s.totalUsers.toLocaleString(),
     subtitle: (s) => `${s.totalClients} clients · ${s.totalDesigners} designers`,
+  },
+  {
+    key: 'pendingAdminReview',
+    label: 'Delivery Review',
+    icon: ShieldCheck,
+    bgClass: 'bg-orange-500/20',
+    iconColorClass: 'text-orange-500',
+    format: (s) => s.pendingAdminReview.toLocaleString(),
+    subtitle: () => 'Awaiting admin approval',
   },
   {
     key: 'pendingBriefs',
@@ -66,8 +76,8 @@ const STAT_CARDS: {
 const AdminStatsDisplay: React.FC<AdminStatsProps> = ({ stats, isLoading }) => {
   if (isLoading || !stats) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, idx) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        {[...Array(5)].map((_, idx) => (
           <Card key={idx} className="bg-secondary/30 border-border animate-pulse">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
@@ -85,7 +95,7 @@ const AdminStatsDisplay: React.FC<AdminStatsProps> = ({ stats, isLoading }) => {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
       {STAT_CARDS.map(({ label, icon: Icon, bgClass, iconColorClass, format, subtitle }) => (
         <Card key={label} className="bg-secondary/30 border-border">
           <CardContent className="pt-6">

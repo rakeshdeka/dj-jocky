@@ -13,6 +13,9 @@ import { Button } from "../../../components/dashboard/ui/button"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import type { RootState } from "../../../store/store"
+import { fetchDesignerBrief } from '../../../lib/designer-api';
+import { getDesignerFeedbackNotes, type DesignerFeedbackNotes as DesignerFeedbackNotesData } from '../../../lib/briefs-api';
+import DesignerFeedbackNotes from '../../../components/dashboard/designer/DesignerFeedbackNotes';
 
 interface ChatMessage {
   _id: string
@@ -53,6 +56,7 @@ const BriefGroupChat = ({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [briefDetails, setBriefDetails] = useState<BriefDetails | null>(null)
   const [statusProgress, setStatusProgress] = useState<StatusProgress | null>(null)
+  const [designerFeedbackNotes, setDesignerFeedbackNotes] = useState<DesignerFeedbackNotesData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSendingMessage, setIsSendingMessage] = useState(false)
 
@@ -70,6 +74,23 @@ const BriefGroupChat = ({
       setBriefDetails(data.brief || null)
       setStatusProgress(data.status_progress || null)
       setProjectTitle(data.brief?.title || "Project Messages")
+
+      if (user?.role === 'designer' && token) {
+        try {
+          const designerBrief = await fetchDesignerBrief(token, briefId)
+          setDesignerFeedbackNotes(getDesignerFeedbackNotes({
+            ...designerBrief,
+            status_progress: designerBrief.status_progress ?? data.status_progress,
+          }))
+        } catch {
+          setDesignerFeedbackNotes(getDesignerFeedbackNotes({
+            ...(data.brief || {}),
+            status_progress: data.status_progress,
+          }))
+        }
+      } else {
+        setDesignerFeedbackNotes(null)
+      }
     } catch {
       toast.error("Could not load conversation")
       setBriefDetails(null)
@@ -77,7 +98,7 @@ const BriefGroupChat = ({
     } finally {
       setIsLoading(false)
     }
-  }, [apiUrl, briefId, token])
+  }, [apiUrl, briefId, token, user?.role])
 
   useEffect(() => {
     fetchMessages()
@@ -174,6 +195,12 @@ const BriefGroupChat = ({
           <p className="text-xs text-muted-foreground truncate max-w-[60vw]">{projectTitle}</p>
         </div>
       </div>
+
+      {user?.role === 'designer' && designerFeedbackNotes && (
+        <div className="mb-4">
+          <DesignerFeedbackNotes notes={designerFeedbackNotes} />
+        </div>
+      )}
 
       <div className="h-[calc(100vh-220px)] min-h-[520px] rounded-md border border-border overflow-hidden bg-card/20">
         {isLoading && messages.length === 0 ? (

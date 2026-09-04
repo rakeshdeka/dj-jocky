@@ -2,29 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { format, isValid, parseISO } from "date-fns"
-import axios from "axios"
 import { useSelector } from "react-redux"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import type { RootState } from "../../../store/store"
 import MainLayout from "../../../components/dashboard/layout/MainLayout"
 import { Button } from "../../../components/dashboard/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/dashboard/ui/card"
-import { Label } from "../../../components/dashboard/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "../../../components/dashboard/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/dashboard/ui/select"
 import { toast } from "sonner"
 import {
   Calendar as CalendarIcon,
@@ -38,45 +21,17 @@ import {
   Loader2,
 } from "lucide-react"
 import { Badge } from "../../../components/dashboard/ui/badge"
-import { fetchDesignersDropdown, type UserDropdownItem } from "../../../lib/meetings-api"
+import { fetchAdminMeetings, type MeetingListItem } from "../../../lib/meetings-api"
 
-export interface Meeting {
-  _id: string
-  date: string
-  time: string
-  agenda: string
-  meeting_type: string
-  meeting_link: string
-  status: string
-  client_id: { _id: string; name: string; email: string } | null
-  designer_id: { _id: string; name: string; email: string } | null
-}
+export type Meeting = MeetingListItem
 
 export default function AdminMeetings() {
+  const navigate = useNavigate()
   const apiUrl = import.meta.env.VITE_API_URL || ""
   const { token } = useSelector((state: RootState) => state.auth)
 
   const [meetings, setMeetings] = useState<Meeting[]>([])
-  const [designers, setDesigners] = useState<UserDropdownItem[]>([])
   const [isFetching, setIsFetching] = useState<boolean>(true)
-  const [loading, setLoading] = useState<boolean>(false)
-
-  const [isAssignOpen, setIsAssignOpen] = useState<boolean>(false)
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
-  const [assignDesignerId, setAssignDesignerId] = useState<string>("")
-
-  const getAuthConfig = useCallback(() => ({
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    withCredentials: true,
-  }), [token])
-
-  const getFetchHeaders = useCallback(() => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  }), [token])
 
   const safeFormatDate = (dateStr: string) => {
     if (!dateStr) return "N/A"
@@ -93,20 +48,13 @@ export default function AdminMeetings() {
 
     try {
       setIsFetching(true)
-
-      const [meetRes, designersList] = await Promise.all([
-        axios.get(`${apiUrl}/admin/meetings`, getAuthConfig()),
-        fetchDesignersDropdown(apiUrl, token),
-      ])
-
-      setMeetings(meetRes.data.items || [])
-      setDesigners(designersList)
+      setMeetings(await fetchAdminMeetings(apiUrl, token))
     } catch {
       toast.error("Failed to sync dashboard data")
     } finally {
       setIsFetching(false)
     }
-  }, [apiUrl, getAuthConfig, token])
+  }, [apiUrl, token])
 
   useEffect(() => {
     if (token) {
@@ -115,34 +63,6 @@ export default function AdminMeetings() {
       setIsFetching(false)
     }
   }, [token, fetchData])
-
-  const handleAssignDesigner = async () => {
-    if (!assignDesignerId || !selectedMeetingId) return
-
-    try {
-      setLoading(true)
-      const res = await fetch(`${apiUrl}/meetings/${selectedMeetingId}/assign-designer`, {
-        method: "PATCH",
-        headers: getFetchHeaders(),
-        credentials: "include",
-        body: JSON.stringify({ designer_id: assignDesignerId }),
-      })
-
-      if (res.ok) {
-        toast.success("Designer Assigned Successfully")
-        setIsAssignOpen(false)
-        setAssignDesignerId("")
-        setSelectedMeetingId(null)
-        fetchData()
-      } else {
-        toast.error("Failed to update assignment")
-      }
-    } catch {
-      toast.error("Server error. Check your connection.")
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <MainLayout>
@@ -156,7 +76,7 @@ export default function AdminMeetings() {
           className="bg-[#C4FE01] text-black hover:bg-[#C4FE01]/90 font-black rounded-md px-8 h-12 uppercase text-xs tracking-widest transition-all shadow-xl shadow-[#C4FE01]/10"
         >
           <Link to="/admin/meetings/new">
-            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Manual Entry
+            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Schedule Meeting
           </Link>
         </Button>
       </div>
@@ -247,10 +167,7 @@ export default function AdminMeetings() {
                           className={`h-8 w-8 rounded-md ${
                             isUnassigned ? "bg-orange-500 text-white hover:bg-orange-600" : "hover:bg-[#C4FE01] hover:text-black"
                           }`}
-                          onClick={() => {
-                            setSelectedMeetingId(m._id)
-                            setIsAssignOpen(true)
-                          }}
+                          onClick={() => navigate(`/admin/meetings/${m._id}/assign-designer`)}
                         >
                           <UserPlus className="h-4 w-4" />
                         </Button>
@@ -270,7 +187,7 @@ export default function AdminMeetings() {
                         disabled={!m.meeting_link}
                         className="w-full text-[10px] font-black uppercase h-10 rounded-md border-border/50 hover:bg-[#C4FE01] hover:text-black hover:border-transparent transition-all"
                       >
-                        Join Session <ExternalLink className="ml-2 h-3 w-3" />
+                        Join Google Meet <ExternalLink className="ml-2 h-3 w-3" />
                       </Button>
                     </a>
                   </div>
@@ -280,50 +197,15 @@ export default function AdminMeetings() {
           </div>
 
           {meetings.length === 0 && (
-            <div className="py-20 text-center border-2 border-dashed border-border/50 rounded-xl">
+            <div className="py-20 text-center border-2 border-dashed border-border/50 rounded-xl space-y-4">
               <p className="text-muted-foreground text-sm font-medium">No scheduled meetings found.</p>
+              <Button asChild className="bg-[#C4FE01] text-black hover:bg-[#C4FE01]/90 font-bold">
+                <Link to="/admin/meetings/new">Schedule Meeting</Link>
+              </Button>
             </div>
           )}
         </>
       )}
-
-      <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-        <DialogContent className="sm:max-w-[400px] border-none rounded-md p-8 bg-card shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-black italic uppercase tracking-tighter">Assign Professional</DialogTitle>
-            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60">
-              Update session handler
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4 space-y-3">
-            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Team Member</Label>
-            <Select value={assignDesignerId} onValueChange={setAssignDesignerId}>
-              <SelectTrigger className="h-12 bg-secondary/30 border-none rounded-md text-sm px-4">
-                <SelectValue placeholder="Choose designer..." />
-              </SelectTrigger>
-              <SelectContent>
-                {designers.map((d) => (
-                  <SelectItem key={d.id} value={d.id} className="font-bold py-2 uppercase text-xs cursor-pointer">
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <DialogFooter>
-            <Button
-              onClick={handleAssignDesigner}
-              disabled={loading || !assignDesignerId}
-              className="w-full bg-[#C4FE01] text-black hover:bg-[#C4FE01]/80 font-black h-12 rounded-md uppercase text-xs tracking-widest shadow-xl shadow-[#C4FE01]/10 flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {loading ? "Updating..." : "Confirm Assignment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   )
 }

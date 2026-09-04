@@ -17,6 +17,8 @@ interface BriefsGridProps {
   onStartWork?: (id: string) => void;
   onSubmitWork?: (id: string, title: string) => void;
   updatingBriefId?: string | null;
+  onReviewDelivery?: (id: string, title: string) => void;
+  onViewBrief?: (id: string) => void;
 }
 
 const BriefsGrid: React.FC<BriefsGridProps> = ({
@@ -31,6 +33,8 @@ const BriefsGrid: React.FC<BriefsGridProps> = ({
   onStartWork,
   onSubmitWork,
   updatingBriefId = null,
+  onReviewDelivery,
+  onViewBrief,
 }) => {
   const { token } = useSelector((state: RootState) => state.auth);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -99,6 +103,8 @@ const BriefsGrid: React.FC<BriefsGridProps> = ({
           onStartWork={onStartWork}
           onSubmitWork={onSubmitWork}
           isUpdatingStatus={updatingBriefId === brief._id}
+          onReviewDelivery={onReviewDelivery}
+          onViewBrief={onViewBrief}
         />
       ))}
 

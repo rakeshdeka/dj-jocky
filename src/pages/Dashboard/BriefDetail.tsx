@@ -6,26 +6,36 @@ import { toast } from 'sonner';
 import {
   ArrowLeft,
   Calendar,
+  ClipboardCheck,
+  Edit2,
   Loader2,
   MessageSquare,
-  UserPlus,
-  Users,
+  TrendingUp,
 } from 'lucide-react';
 
-import MainLayout from '../../../components/dashboard/layout/MainLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/dashboard/ui/card';
-import { Button } from '../../../components/dashboard/ui/button';
-import { Badge } from '../../../components/dashboard/ui/badge';
-import BriefFilesPanel from '../../../components/dashboard/briefs/BriefFilesPanel';
-import { RootState } from '../../../store/store';
+import MainLayout from '../../components/dashboard/layout/MainLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/dashboard/ui/card';
+import { Button } from '../../components/dashboard/ui/button';
+import { Badge } from '../../components/dashboard/ui/badge';
+import BriefFilesPanel from '../../components/dashboard/briefs/BriefFilesPanel';
+import ClientDeliveryReviewSheet from '../../components/dashboard/briefs/ClientDeliveryReviewSheet';
+import DesignerBriefActions from '../../components/dashboard/designer/DesignerBriefActions';
+import DesignerFeedbackNotes from '../../components/dashboard/designer/DesignerFeedbackNotes';
+import SubmitWorkSheet from '../../components/dashboard/designer/SubmitWorkSheet';
+import { RootState } from '../../store/store';
 import {
+  canEditBrief,
+  canReviewBrief,
+  canClientSeeDeliveryFiles,
   fetchBrief,
   formatBriefPriority,
   formatBriefStatus,
-  canAdminReviewDelivery,
+  getDesignerFeedbackNotes,
   type Brief,
-} from '../../../lib/briefs-api';
-import AdminDeliveryReviewPanel from '../../../components/dashboard/admin/AdminDeliveryReviewPanel';
+  type BriefStatus,
+} from '../../lib/briefs-api';
+import { fetchBriefFilesBundle } from '../../lib/files-api';
+import { fetchDesignerBrief, startDesignerWork } from '../../lib/designer-api';
 
 const statusVariant = (status?: string) => {
   switch (status) {
@@ -34,8 +44,6 @@ const statusVariant = (status?: string) => {
     case 'in_progress':
     case 'under_review':
       return 'secondary';
-    case 'pending_admin_review':
-      return 'destructive';
     case 'revision':
       return 'destructive';
     default:
@@ -50,7 +58,7 @@ const priorityClass = (priority?: string) => {
     case 'low':
       return 'border-blue-500/40 text-blue-400 bg-blue-500/10';
     default:
-      return 'border-[#c5fb00]/40 text-[#c5fb00] bg-[#c5fb00]/10';
+      return 'border-[#C4FE01]/40 text-[#C4FE01] bg-[#C4FE01]/10';
   }
 };
 
@@ -69,14 +77,25 @@ const formatDate = (value?: string) => {
   }
 };
 
-const AdminProjectDetail = () => {
+const BriefDetail = () => {
   const { briefId } = useParams<{ briefId: string }>();
   const navigate = useNavigate();
-  const { token } = useSelector((state: RootState) => state.auth);
+  const { token, user } = useSelector((state: RootState) => state.auth);
+
+  const isClient = user?.role === 'client';
+  const isDesigner = user?.role === 'designer';
+  const listPath = isDesigner ? '/designer/briefs' : '/client/briefs';
+  const progressPath = isDesigner ? '/designer/progress' : '/client/progress';
+  const messagesPath = isDesigner
+    ? `/designer/briefs/${briefId}/messages`
+    : `/client/progress/${briefId}`;
 
   const [brief, setBrief] = useState<Brief | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [submitWorkOpen, setSubmitWorkOpen] = useState(false);
 
   const loadBrief = useCallback(async () => {
     if (!token || !briefId) return;
@@ -84,7 +103,28 @@ const AdminProjectDetail = () => {
     try {
       setIsLoading(true);
       setLoadError(null);
-      setBrief(await fetchBrief(token, briefId));
+
+      let briefData: Brief;
+
+      if (isDesigner) {
+        briefData = (await fetchDesignerBrief(token, briefId)) as unknown as Brief;
+      } else {
+        briefData = await fetchBrief(token, briefId);
+      }
+
+      if (
+        (!briefData.reference_files?.length && !briefData.delivery_files?.length) ||
+        briefData.reference_files === undefined
+      ) {
+        const files = await fetchBriefFilesBundle(token, briefId);
+        briefData = {
+          ...briefData,
+          reference_files: files.reference_files,
+          delivery_files: files.delivery_files,
+        };
+      }
+
+      setBrief(briefData);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to load brief details';
       setLoadError(message);
@@ -92,17 +132,36 @@ const AdminProjectDetail = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [token, briefId]);
+  }, [token, briefId, isDesigner]);
 
   useEffect(() => {
     loadBrief();
   }, [loadBrief]);
 
+  const handleStartWork = async () => {
+    if (!token || !briefId) return;
+    try {
+      setIsUpdatingStatus(true);
+      await startDesignerWork(token, briefId);
+      toast.success('Work started');
+      setBrief((prev) => (prev ? { ...prev, status: 'in_progress' } : prev));
+      await loadBrief();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to start work');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleStatusChange = (status: BriefStatus) => {
+    setBrief((prev) => (prev ? { ...prev, status } : prev));
+  };
+
   if (isLoading) {
     return (
       <MainLayout>
         <div className="flex flex-col items-center justify-center py-32 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-[#c5fb00]" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#C4FE01]" />
           <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold">
             Loading brief details...
           </p>
@@ -116,29 +175,36 @@ const AdminProjectDetail = () => {
       <MainLayout>
         <div className="max-w-lg mx-auto py-24 text-center space-y-4">
           <p className="text-sm text-muted-foreground">{loadError || 'Brief not found'}</p>
-          <Button variant="outline" onClick={() => navigate('/admin/projects')}>
+          <Button variant="outline" onClick={() => navigate(listPath)}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
+            Back to Briefs
           </Button>
         </div>
       </MainLayout>
     );
   }
 
+  const canReview = isClient && canReviewBrief(brief.status);
+  const canEdit = isClient && canEditBrief(brief.status);
+  const statusRole = isDesigner ? 'designer' : isClient ? 'client' : 'admin';
+  const visibleDeliveryFiles =
+    isClient && !canClientSeeDeliveryFiles(brief.status) ? [] : brief.delivery_files || [];
+  const designerFeedbackNotes = isDesigner ? getDesignerFeedbackNotes(brief) : null;
+
   return (
     <MainLayout>
       <div className="mb-6">
         <Link
-          to="/admin/projects"
-          className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-[#c5fb00] transition-colors mb-4"
+          to={listPath}
+          className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-[#C4FE01] transition-colors mb-4"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Projects
+          Back to Briefs
         </Link>
 
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#c5fb00] mb-1">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#C4FE01] mb-1">
               {getServiceName(brief.service_id)}
             </p>
             <h1 className="text-xl font-bold tracking-tight truncate">{brief.title}</h1>
@@ -149,31 +215,57 @@ const AdminProjectDetail = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/admin/projects/${brief._id}/messages`)}
+              onClick={() => navigate(`${progressPath}/${brief._id}`)}
             >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Messages
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Progress
             </Button>
-            <Button
-              size="sm"
-              className="bg-[#c5fb00] hover:bg-[#b0e000] text-black font-bold"
-              onClick={() => navigate(`/admin/projects/${brief._id}/assign-designer`)}
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              {brief.designer_id ? 'Change Designer' : 'Assign Designer'}
-            </Button>
+
+            {isDesigner && (
+              <Button variant="outline" size="sm" onClick={() => navigate(messagesPath)}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Messages
+              </Button>
+            )}
+
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/client/edit-brief/${brief._id}`)}
+              >
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
+
+            {canReview && (
+              <Button
+                size="sm"
+                className="bg-[#C4FE01] hover:bg-[#b2e600] text-black font-bold"
+                onClick={() => setReviewOpen(true)}
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Review Delivery
+              </Button>
+            )}
+
+            {isDesigner && (
+              <DesignerBriefActions
+                status={brief.status || 'not_assigned'}
+                isUpdating={isUpdatingStatus}
+                onStartWork={handleStartWork}
+                onSubmitWork={() => setSubmitWorkOpen(true)}
+              />
+            )}
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
-          {canAdminReviewDelivery(brief.status) && (
-            <AdminDeliveryReviewPanel
-              briefId={brief._id}
-              token={token}
-              onSuccess={loadBrief}
-            />
+          {designerFeedbackNotes && (
+            <DesignerFeedbackNotes notes={designerFeedbackNotes} updatedAt={brief.updatedAt} />
           )}
 
           <Card className="bg-card/20 backdrop-blur-md border-border overflow-hidden">
@@ -185,8 +277,8 @@ const AdminProjectDetail = () => {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#c5fb00]/20 to-transparent">
-                  <span className="text-6xl font-bold text-[#c5fb00]/40">
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#C4FE01]/20 to-transparent">
+                  <span className="text-6xl font-bold text-[#C4FE01]/40">
                     {brief.title?.charAt(0) || 'B'}
                   </span>
                 </div>
@@ -196,7 +288,7 @@ const AdminProjectDetail = () => {
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={statusVariant(brief.status)} className="capitalize text-[10px]">
-                  {formatBriefStatus(brief.status, 'admin')}
+                  {formatBriefStatus(brief.status, statusRole)}
                 </Badge>
                 <Badge
                   variant="outline"
@@ -219,7 +311,7 @@ const AdminProjectDetail = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/40">
                 <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-[#c5fb00] mt-0.5 shrink-0" />
+                  <Calendar className="h-4 w-4 text-[#C4FE01] mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                       Delivery Date
@@ -228,7 +320,7 @@ const AdminProjectDetail = () => {
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-[#c5fb00] mt-0.5 shrink-0" />
+                  <Calendar className="h-4 w-4 text-[#C4FE01] mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                       Created
@@ -249,47 +341,18 @@ const AdminProjectDetail = () => {
             <CardContent>
               <BriefFilesPanel
                 referenceFiles={brief.reference_files || []}
-                deliveryFiles={brief.delivery_files || []}
+                deliveryFiles={visibleDeliveryFiles}
               />
+              {isClient && !canClientSeeDeliveryFiles(brief.status) && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  Delivery files will appear here once your project is ready for review.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
 
         <div className="space-y-6">
-          <Card className="bg-card/20 backdrop-blur-md border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-xs font-bold tracking-[0.2em] uppercase flex items-center gap-2">
-                <Users className="h-4 w-4 text-[#c5fb00]" />
-                People
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 rounded-lg border border-border/60 bg-secondary/10">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-1">
-                  Client
-                </p>
-                <p className="text-sm font-semibold">{brief.client_id?.name || 'Unassigned'}</p>
-                {brief.client_id?.email && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{brief.client_id.email}</p>
-                )}
-              </div>
-
-              <div className="p-3 rounded-lg border border-border/60 bg-secondary/10">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-1">
-                  Designer
-                </p>
-                <p className="text-sm font-semibold">
-                  {brief.designer_id?.name || (
-                    <span className="text-muted-foreground italic">Not assigned</span>
-                  )}
-                </p>
-                {brief.designer_id?.email && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{brief.designer_id.email}</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
           <Card className="bg-card/20 backdrop-blur-md border-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-xs font-bold tracking-[0.2em] uppercase">
@@ -307,14 +370,41 @@ const AdminProjectDetail = () => {
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Delivery files</span>
-                <span className="font-medium">{brief.delivery_files?.length ?? 0}</span>
+                <span className="font-medium">{visibleDeliveryFiles.length}</span>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {isClient && (
+        <ClientDeliveryReviewSheet
+          open={reviewOpen}
+          briefId={brief._id}
+          briefTitle={brief.title}
+          token={token}
+          onClose={() => setReviewOpen(false)}
+          onSuccess={(newStatus) => {
+            handleStatusChange(newStatus);
+            loadBrief();
+          }}
+        />
+      )}
+
+      {isDesigner && (
+        <SubmitWorkSheet
+          open={submitWorkOpen}
+          briefId={brief._id}
+          briefTitle={brief.title}
+          token={token}
+          onClose={() => setSubmitWorkOpen(false)}
+          onSuccess={async () => {
+            await loadBrief();
+          }}
+        />
+      )}
     </MainLayout>
   );
 };
 
-export default AdminProjectDetail;
+export default BriefDetail;

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
-import { Conversation } from '../../../pages/Dashboard/Progress';
+import { Conversation } from '../../../types/progress';
 import { Brain, Calendar, CheckCircle, Clock, Flag, ThumbsUp, X } from 'lucide-react';
 
 interface ConversationSummaryProps {

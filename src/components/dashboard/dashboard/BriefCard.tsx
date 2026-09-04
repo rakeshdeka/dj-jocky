@@ -1,7 +1,9 @@
 import React from 'react'
-import { MoreHorizontal, Edit2, Trash2, FileText, Loader2, MessageSquare } from 'lucide-react'
+import { MoreHorizontal, Edit2, Trash2, FileText, Loader2, MessageSquare, ClipboardCheck } from 'lucide-react'
 import { useNavigate } from "react-router-dom"
 import DesignerBriefActions from '../designer/DesignerBriefActions'
+import { Button } from '../ui/button'
+import { canReviewBrief, formatBriefStatus, type BriefStatus } from '../../../lib/briefs-api';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +26,8 @@ interface BriefCardProps {
   onStartWork?: (id: string) => void
   onSubmitWork?: (id: string, title: string) => void
   isUpdatingStatus?: boolean
+  onReviewDelivery?: (id: string, title: string) => void
+  onViewBrief?: (id: string) => void
 }
 
 const BriefCard: React.FC<BriefCardProps> = ({
@@ -40,14 +44,30 @@ const BriefCard: React.FC<BriefCardProps> = ({
   onStartWork,
   onSubmitWork,
   isUpdatingStatus = false,
+  onReviewDelivery,
+  onViewBrief,
 }) => {
   const navigate = useNavigate()
+  const needsReview = role === 'client' && canReviewBrief(status as BriefStatus)
+  const detailPath = role === 'client' ? `/client/briefs/${id}` : `/designer/briefs/${id}`
+
+  const openBriefDetail = () => {
+    if (onViewBrief) {
+      onViewBrief(id)
+      return
+    }
+    navigate(detailPath)
+  }
 
   return (
     <div className={`bg-card rounded-md overflow-hidden shadow-sm group hover:border-[#C4FE01] transition-all ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}>
       <div className="relative">
 
-        <div className="aspect-video bg-muted/30 flex items-center justify-center overflow-hidden">
+        <button
+          type="button"
+          onClick={openBriefDetail}
+          className="aspect-video bg-muted/30 flex items-center justify-center overflow-hidden w-full cursor-pointer"
+        >
           {imageSrc ? (
             <img src={imageSrc} className="w-full h-full object-cover" alt={title} />
           ) : (
@@ -57,10 +77,10 @@ const BriefCard: React.FC<BriefCardProps> = ({
               </span>
             </div>
           )}
-        </div>
+        </button>
 
         <div className="absolute top-3 left-3 bg-background/80 px-2 py-1 rounded text-[10px] font-bold uppercase">
-          {status}
+          {formatBriefStatus(status, role)}
         </div>
 
         <div className="absolute top-3 right-3">
@@ -77,15 +97,27 @@ const BriefCard: React.FC<BriefCardProps> = ({
 
             <DropdownMenuContent align="end">
 
-              <DropdownMenuItem onClick={() => onViewFiles(id, title)}>
-                <FileText className="mr-2 h-4 w-4" /> View Files
-              </DropdownMenuItem>
-
               {role === "client" && (
                 <>
-                  <DropdownMenuItem onClick={() => navigate(`/client/edit-brief/${id}`)}>
-                    <Edit2 className="mr-2 h-4 w-4" /> Edit
+                  <DropdownMenuItem onClick={openBriefDetail}>
+                    <FileText className="mr-2 h-4 w-4" /> View Details
                   </DropdownMenuItem>
+
+                  {needsReview && onReviewDelivery && (
+                    <DropdownMenuItem onClick={() => onReviewDelivery(id, title)}>
+                      <ClipboardCheck className="mr-2 h-4 w-4" /> Review Delivery
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuItem onClick={() => onViewFiles(id, title)}>
+                    <FileText className="mr-2 h-4 w-4" /> View Files
+                  </DropdownMenuItem>
+
+                  {!needsReview && (
+                    <DropdownMenuItem onClick={() => navigate(`/client/edit-brief/${id}`)}>
+                      <Edit2 className="mr-2 h-4 w-4" /> Edit
+                    </DropdownMenuItem>
+                  )}
 
                   <DropdownMenuSeparator />
 
@@ -100,6 +132,12 @@ const BriefCard: React.FC<BriefCardProps> = ({
 
               {role === "designer" && (
                 <>
+                  <DropdownMenuItem onClick={openBriefDetail}>
+                    <FileText className="mr-2 h-4 w-4" /> View Details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onViewFiles(id, title)}>
+                    <FileText className="mr-2 h-4 w-4" /> View Files
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate(`/designer/briefs/${id}/messages`)}>
                     <MessageSquare className="mr-2 h-4 w-4" /> Messages
                   </DropdownMenuItem>
@@ -116,12 +154,21 @@ const BriefCard: React.FC<BriefCardProps> = ({
       </div>
 
       <div className="p-4 space-y-3">
-        <div>
+        <button type="button" onClick={openBriefDetail} className="text-left w-full">
           <span className="text-[10px] text-[#C4FE01] font-bold uppercase">{category}</span>
-          <h3 className="font-medium truncate">{title}</h3>
-        </div>
+          <h3 className="font-medium truncate hover:text-[#C4FE01] transition-colors">{title}</h3>
+        </button>
 
-        {role === 'designer' && (onStartWork || onSubmitWork) && (
+        {needsReview && onReviewDelivery ? (
+          <Button
+            size="sm"
+            className="w-full bg-[#C4FE01] hover:bg-[#b2e600] text-black"
+            onClick={() => onReviewDelivery(id, title)}
+          >
+            <ClipboardCheck className="h-4 w-4 mr-2" />
+            Review Delivery
+          </Button>
+        ) : role === 'designer' && (onStartWork || onSubmitWork) ? (
           <DesignerBriefActions
             status={status}
             isUpdating={isUpdatingStatus}
@@ -129,7 +176,7 @@ const BriefCard: React.FC<BriefCardProps> = ({
             onSubmitWork={onSubmitWork ? () => onSubmitWork(id, title) : undefined}
             className="w-full"
           />
-        )}
+        ) : null}
       </div>
     </div>
   )

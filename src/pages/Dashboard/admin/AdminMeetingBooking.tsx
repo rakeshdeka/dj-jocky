@@ -31,6 +31,7 @@ import {
   createMeeting,
   fetchClientsDropdown,
   fetchDesignersDropdown,
+  isValidGoogleMeetUrl,
   type UserDropdownItem,
 } from "../../../lib/meetings-api";
 
@@ -39,6 +40,7 @@ const EMPTY_FORM = {
   time: "",
   meeting_type: "service",
   agenda: "",
+  meeting_link: "",
   client_id: "",
   designer_id: "",
 };
@@ -79,8 +81,13 @@ export default function AdminMeetingBooking() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!form.client_id || !form.date || !form.time || !form.agenda.trim()) {
+    if (!form.client_id || !form.date || !form.time || !form.agenda.trim() || !form.meeting_link.trim()) {
       toast.error("Please fill all required fields");
+      return;
+    }
+
+    if (!isValidGoogleMeetUrl(form.meeting_link)) {
+      toast.error("Meeting link must be a valid Google Meet URL (https://meet.google.com/...)");
       return;
     }
 
@@ -94,6 +101,7 @@ export default function AdminMeetingBooking() {
       time: form.time,
       meeting_type: form.meeting_type,
       agenda: form.agenda.trim(),
+      meeting_link: form.meeting_link.trim(),
       client_id: form.client_id,
       ...(form.designer_id && form.designer_id !== "none"
         ? { designer_id: form.designer_id }
@@ -127,7 +135,7 @@ export default function AdminMeetingBooking() {
           </Link>
         </Button>
 
-        <h1 className="text-xl font-bold mb-1 tracking-[0.2em] uppercase">Manual Booking</h1>
+        <h1 className="text-xl font-bold mb-1 tracking-[0.2em] uppercase">Schedule Meeting</h1>
         <p className="text-sm text-muted-foreground">
           Schedule a client session and optionally assign a designer.
         </p>
@@ -136,7 +144,7 @@ export default function AdminMeetingBooking() {
       <Card className="max-w-2xl bg-card border-border/40">
         <CardHeader>
           <CardTitle className="text-lg font-black uppercase tracking-tight">Session Details</CardTitle>
-          <CardDescription>All fields except designer are required.</CardDescription>
+          <CardDescription>All fields except designer are required. Include a Google Meet link.</CardDescription>
         </CardHeader>
 
         <form onSubmit={handleSubmit}>
@@ -238,6 +246,24 @@ export default function AdminMeetingBooking() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Google Meet Link
+              </Label>
+              <Input
+                type="url"
+                required
+                placeholder="https://meet.google.com/abc-defg-hij"
+                disabled={isLoadingOptions || isSubmitting}
+                className="bg-secondary/30 border-none h-12 rounded-md text-sm"
+                value={form.meeting_link}
+                onChange={(e) => setForm({ ...form, meeting_link: e.target.value })}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Paste the Google Meet URL for this session.
+              </p>
             </div>
 
             <div className="space-y-2">

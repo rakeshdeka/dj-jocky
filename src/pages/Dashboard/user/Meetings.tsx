@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Button } from "../../../components/dashboard/ui/button"
 import {
   Card,
@@ -20,16 +21,16 @@ import {
   Loader2
 } from "lucide-react"
 import { ScrollArea } from "../../../components/dashboard/ui/scroll-area"
-import { NewMeetingDialog } from "../../../components/dashboard/ui/new-meeting-dialog"
 import MainLayout from "../../../components/dashboard/layout/MainLayout"
 import axios from "axios"
 import { useSelector } from "react-redux"
 import { RootState } from "../../../store/store"
 
 const MeetingsPage = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [meetingsData, setMeetingsData] = useState<any[]>([])
   const [selectedMeeting, setSelectedMeeting] = useState<any>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const { token } = useSelector((state: RootState) => state.auth)
@@ -53,7 +54,7 @@ const MeetingsPage = () => {
 
   useEffect(() => {
     if (token) fetchMeetings()
-  }, [token])
+  }, [token, location.pathname])
 
   return (
     <MainLayout>
@@ -63,11 +64,13 @@ const MeetingsPage = () => {
           <p className="text-muted-foreground text-sm">Review and join your upcoming project consultations.</p>
         </div>
         <Button
-          onClick={() => setIsDialogOpen(true)}
+          asChild
           className="bg-[#C4FE01] text-black hover:bg-[#C4FE01]/90 font-bold rounded-full px-6"
         >
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Schedule Meeting
+          <Link to="/client/meetings/new">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Schedule Meeting
+          </Link>
         </Button>
       </div>
 
@@ -117,6 +120,14 @@ const MeetingsPage = () => {
               <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-border rounded-md">
                 <Inbox className="h-8 w-8 mb-3 text-muted-foreground/60" />
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">No Sessions Booked</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => navigate("/client/meetings/new")}
+                >
+                  Schedule your first meeting
+                </Button>
               </div>
             )}
           </ScrollArea>
@@ -153,19 +164,30 @@ const MeetingsPage = () => {
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     This is a <span className="text-white font-bold">{selectedMeeting.meeting_type}</span> session related to your selected project service. Please ensure you are in a quiet environment before joining.
                   </p>
+                  {selectedMeeting.meeting_link && (
+                    <p className="text-[10px] text-muted-foreground mt-3 truncate">
+                      Google Meet: {selectedMeeting.meeting_link}
+                    </p>
+                  )}
                 </div>
               </CardContent>
               <CardFooter className="p-8 pt-0 flex gap-4">
-                <a
-                  href={selectedMeeting.meeting_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1"
-                >
-                  <Button className="w-full bg-[#C4FE01] text-black hover:bg-[#C4FE01]/80 font-black rounded-md h-12">
-                    Join Discord Session
+                {selectedMeeting.meeting_link ? (
+                  <a
+                    href={selectedMeeting.meeting_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1"
+                  >
+                    <Button className="w-full bg-[#C4FE01] text-black hover:bg-[#C4FE01]/80 font-black rounded-md h-12">
+                      Join Google Meet
+                    </Button>
+                  </a>
+                ) : (
+                  <Button disabled className="w-full font-black rounded-md h-12 flex-1">
+                    Google Meet link unavailable
                   </Button>
-                </a>
+                )}
               </CardFooter>
             </Card>
           ) : (
@@ -176,12 +198,6 @@ const MeetingsPage = () => {
           )}
         </div>
       </div>
-
-      <NewMeetingDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        onMeetingCreated={fetchMeetings}
-      />
     </MainLayout>
   )
 }

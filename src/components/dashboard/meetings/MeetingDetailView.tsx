@@ -86,12 +86,12 @@ const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
     }
   };
 
-  const handleJoinDiscord = () => {
-    if (meeting.discordLink) {
-      window.open(meeting.discordLink, '_blank');
+  const handleJoinMeet = () => {
+    if (meeting.meetingLink) {
+      window.open(meeting.meetingLink, '_blank');
       toast({
         title: 'Joining Meeting',
-        description: 'Opening Discord link in a new tab',
+        description: 'Opening Google Meet in a new tab',
       });
     } else if (onJoin) {
       onJoin(meeting.id);
@@ -179,19 +179,19 @@ const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
               </div>
             )}
 
-            {meeting.status === 'approved' && meeting.discordLink && (
+            {meeting.status === 'approved' && meeting.meetingLink && (
               <div className="bg-primary/10 p-3 rounded-md">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="text-sm font-medium flex items-center">
                       <MessageCircle className="h-4 w-4 mr-2" />
-                      Discord Meeting Link
+                      Google Meet Link
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
                       Click the button to join the meeting
                     </div>
                   </div>
-                  <Button size="sm" onClick={handleJoinDiscord}>
+                  <Button size="sm" onClick={handleJoinMeet}>
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Join
                   </Button>

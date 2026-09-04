@@ -9,7 +9,7 @@ import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { cn } from '../../../lib/utils';
 import { CalendarIcon, Clock } from 'lucide-react';
-import { Conversation } from '../../../pages/Dashboard/Progress';
+import { Conversation } from '../../../types/progress';
 import { Meeting } from '../../../types/meeting';
 
 interface MeetingRequestFormProps {
@@ -53,7 +53,7 @@ const MeetingRequestForm: React.FC<MeetingRequestFormProps> = ({
       startTime,
       endTime,
       agenda,
-      discordLink: undefined
+      meetingLink: undefined
     });
   };
   

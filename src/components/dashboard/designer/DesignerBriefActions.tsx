@@ -1,6 +1,10 @@
-import { Loader2, PlayCircle, Send } from 'lucide-react';
+import { Loader2, PlayCircle, Send, Clock } from 'lucide-react';
 import { Button } from '../ui/button';
-import { canStartDesignerWork, canSubmitDesignerWork } from '../../../lib/designer-api';
+import {
+  canStartDesignerWork,
+  canSubmitDesignerWork,
+  isDesignerAwaitingAdminReview,
+} from '../../../lib/designer-api';
 
 type DesignerBriefActionsProps = {
   status: string;
@@ -19,6 +23,20 @@ const DesignerBriefActions = ({
   className = '',
   size = 'sm',
 }: DesignerBriefActionsProps) => {
+  if (isDesignerAwaitingAdminReview(status)) {
+    return (
+      <Button
+        size={size}
+        variant="outline"
+        disabled
+        className={`border-orange-500/30 text-orange-400 ${className}`}
+      >
+        <Clock className="h-3.5 w-3.5 mr-2" />
+        Awaiting Admin Review
+      </Button>
+    );
+  }
+
   if (canStartDesignerWork(status) && onStartWork) {
     return (
       <Button

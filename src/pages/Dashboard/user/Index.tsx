@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchMyBriefs } from '../../../lib/briefs-api';
-import { fetchBriefFilesBundle, type BriefFilesBundle } from '../../../lib/files-api';
+import { fetchMyBriefs, type Brief, type BriefStatus } from '../../../lib/briefs-api';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import Search from '../../../components/dashboard/ui/Search';
 import SortDropdown from '../../../components/dashboard/ui/SortDropdown';
 import BriefsGrid from '../../../components/dashboard/dashboard/BriefsGrid';
-import BriefFilesPanel from '../../../components/dashboard/briefs/BriefFilesPanel';
+import ClientDeliveryReviewSheet from '../../../components/dashboard/briefs/ClientDeliveryReviewSheet';
 import { Button } from '../../../components/dashboard/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../../../components/dashboard/ui/sheet';
 import { RootState } from '../../../store/store';
 
 const sortOptions = [
@@ -22,18 +20,17 @@ const sortOptions = [
 ];
 
 const Index = () => {
+  const navigate = useNavigate();
   const { token } = useSelector((state: RootState) => state.auth);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('date-created');
-  const [briefs, setBriefs] = useState<any[]>([]);
+  const [briefs, setBriefs] = useState<Brief[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  const [selectedBrief, setSelectedBrief] = useState<{ id: string; title: string } | null>(null);
-  const [briefFiles, setBriefFiles] = useState<BriefFilesBundle>({
-    reference_files: [],
-    delivery_files: [],
-  });
-  const [isFilesLoading, setIsFilesLoading] = useState(false);
+  const [reviewBrief, setReviewBrief] = useState<{
+    id: string;
+    title: string;
+    mode: 'review' | 'revision';
+  } | null>(null);
 
   const fetchBriefs = async () => {
     try {
@@ -46,25 +43,18 @@ const Index = () => {
     }
   };
 
-  const loadBriefFiles = async (briefId: string) => {
-    if (!token) return;
-    try {
-      setIsFilesLoading(true);
-      setBriefFiles(await fetchBriefFilesBundle(token, briefId));
-    } catch {
-      toast.error('Failed to fetch brief files');
-    } finally {
-      setIsFilesLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (token) fetchBriefs();
   }, [token]);
 
-  const handleOpenFiles = (id: string, title: string) => {
-    setSelectedBrief({ id, title });
-    loadBriefFiles(id);
+  const handleReviewDelivery = (id: string, title: string) => {
+    setReviewBrief({ id, title, mode: 'review' });
+  };
+
+  const handleReviewSuccess = (briefId: string, newStatus: BriefStatus) => {
+    setBriefs((prev) =>
+      prev.map((brief) => (brief._id === briefId ? { ...brief, status: newStatus } : brief)),
+    );
   };
 
   const handleDeleted = (id: string) => {
@@ -98,25 +88,24 @@ const Index = () => {
         sortBy={sortBy}
         isLoading={isLoading}
         onDeleted={handleDeleted}
-        onViewFiles={handleOpenFiles}
+        onViewFiles={() => {}}
+        onViewBrief={(id) => navigate(`/client/briefs/${id}`)}
+        onReviewDelivery={handleReviewDelivery}
         role="client"
         onUploadDelivery={() => {}}
       />
 
-      <Sheet open={!!selectedBrief} onOpenChange={() => setSelectedBrief(null)}>
-        <SheetContent className="sm:max-w-md font-sans overflow-y-auto">
-          <SheetHeader className="mb-6">
-            <SheetTitle>Brief Files</SheetTitle>
-            <SheetDescription>{selectedBrief?.title}</SheetDescription>
-          </SheetHeader>
-
-          <BriefFilesPanel
-            referenceFiles={briefFiles.reference_files}
-            deliveryFiles={briefFiles.delivery_files}
-            isLoading={isFilesLoading}
-          />
-        </SheetContent>
-      </Sheet>
+      <ClientDeliveryReviewSheet
+        open={!!reviewBrief}
+        briefId={reviewBrief?.id ?? null}
+        briefTitle={reviewBrief?.title}
+        token={token}
+        initialMode={reviewBrief?.mode}
+        onClose={() => setReviewBrief(null)}
+        onSuccess={(newStatus) => {
+          if (reviewBrief) handleReviewSuccess(reviewBrief.id, newStatus);
+        }}
+      />
     </MainLayout>
   );
 };

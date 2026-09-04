@@ -54,6 +54,11 @@ const AdminDashboard: React.FC = () => {
         totalClients: raw.totalClients ?? users.clients ?? 0,
         totalDesigners: raw.totalDesigners ?? users.designers ?? 0,
         pendingBriefs: raw.pendingBriefs ?? briefs.pending ?? 0,
+        pendingAdminReview:
+          raw.pendingAdminReview ??
+          briefs.pending_admin_review ??
+          briefs.pendingAdminReview ??
+          0,
         totalBriefs: raw.totalBriefs ?? briefs.total ?? 0,
         completedBriefs: raw.completedBriefs ?? briefs.completed ?? 0,
         totalRevenue: revenue / 100,
@@ -97,6 +102,19 @@ const AdminDashboard: React.FC = () => {
 
       {/* Stats Section with inline component loading */}
       <AdminStatsDisplay stats={stats} isLoading={isLoading} />
+
+      {!isLoading && stats && stats.pendingAdminReview > 0 && (
+        <div className="mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-orange-500/40 text-orange-400 hover:bg-orange-500/10"
+            onClick={() => navigate('/admin/projects', { state: { statusFilter: 'pending_admin_review' } })}
+          >
+            {stats.pendingAdminReview} deliver{stats.pendingAdminReview === 1 ? 'y' : 'ies'} awaiting review
+          </Button>
+        </div>
+      )}
       
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* User Management Section */}

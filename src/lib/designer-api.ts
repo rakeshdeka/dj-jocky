@@ -8,6 +8,7 @@ export type DesignerBriefStatus =
   | 'not_assigned'
   | 'assigned'
   | 'in_progress'
+  | 'pending_admin_review'
   | 'under_review'
   | 'revision'
   | 'completed';
@@ -27,11 +28,17 @@ export type DesignerBrief = {
   client_id?: { _id?: string; name?: string; email?: string };
   service_id?: { _id?: string; name?: string; price?: number };
   designer_id?: { _id?: string; name?: string; email?: string };
+  revision_note?: string;
+  rejection_note?: string;
+  latest_revision_note?: string;
+  latest_rejection_note?: string;
+  admin_rejection_note?: string;
 };
 
 export type DesignerDashboardCounts = {
   assigned: number;
   in_progress: number;
+  pending_admin_review: number;
   under_review: number;
   revision: number;
   completed: number;
@@ -84,6 +91,7 @@ export const fetchDesignerDashboard = async (token: string): Promise<DesignerDas
     counts: data.counts || {
       assigned: 0,
       in_progress: 0,
+      pending_admin_review: 0,
       under_review: 0,
       revision: 0,
       completed: 0,
@@ -118,7 +126,17 @@ export const fetchDesignerBrief = async (
   const res = await axios.get(`${apiBaseUrl}/designer/briefs/${briefId}`, getAuthConfig(token));
   const data = res.data;
   if (data.success === false) throw new Error(getApiError(data, 'Failed to load brief'));
-  return (data.brief || data.item || data.data) as DesignerBriefDetail;
+
+  const brief = (data.brief || data.item || data.data) as DesignerBriefDetail;
+  return {
+    ...brief,
+    revision_note: brief.revision_note ?? data.revision_note,
+    rejection_note: brief.rejection_note ?? data.rejection_note,
+    latest_revision_note: brief.latest_revision_note ?? data.latest_revision_note,
+    latest_rejection_note: brief.latest_rejection_note ?? data.latest_rejection_note,
+    admin_rejection_note: brief.admin_rejection_note ?? data.admin_rejection_note,
+    status_progress: brief.status_progress ?? data.status_progress,
+  };
 };
 
 export const updateDesignerBriefStatus = async (
@@ -165,3 +183,6 @@ export const canStartDesignerWork = (status: string) =>
   status === 'assigned' || status === 'revision';
 
 export const canSubmitDesignerWork = (status: string) => status === 'in_progress';
+
+export const isDesignerAwaitingAdminReview = (status: string) =>
+  status === 'pending_admin_review';

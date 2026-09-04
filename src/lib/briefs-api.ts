@@ -9,9 +9,12 @@ export type BriefStatus =
   | 'not_assigned'
   | 'assigned'
   | 'in_progress'
+  | 'pending_admin_review'
   | 'under_review'
   | 'revision'
   | 'completed';
+
+export type BriefStatusRole = 'client' | 'admin' | 'designer';
 
 export type Brief = {
   _id: string;
@@ -26,6 +29,11 @@ export type Brief = {
   designer_id?: { _id?: string; name?: string; email?: string } | null;
   reference_files?: BriefFile[];
   delivery_files?: BriefFile[];
+  revision_note?: string;
+  rejection_note?: string;
+  latest_revision_note?: string;
+  latest_rejection_note?: string;
+  admin_rejection_note?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -83,8 +91,73 @@ export const normalizeBrief = (item: any, envelope?: Record<string, unknown>): B
   delivery_files: item.delivery_files ?? envelope?.delivery_files,
 });
 
-export const formatBriefStatus = (status?: string) =>
-  (status || 'not_assigned').replace(/_/g, ' ');
+export const formatBriefStatus = (status?: string, role: BriefStatusRole = 'client') => {
+  const value = status || 'not_assigned';
+  if (role === 'client' && value === 'pending_admin_review') return 'in progress';
+  if (value === 'pending_admin_review') return 'pending admin review';
+  return value.replace(/_/g, ' ');
+};
+
+export const getClientKanbanStatus = (status?: BriefStatus): BriefStatus => {
+  if (status === 'pending_admin_review') return 'in_progress';
+  return status || 'not_assigned';
+};
+
+export const canClientSeeDeliveryFiles = (status?: BriefStatus) =>
+  status === 'under_review' || status === 'completed' || status === 'revision';
+
+export const canAdminReviewDelivery = (status?: BriefStatus) =>
+  status === 'pending_admin_review';
+
+export const isPendingAdminReview = (status?: BriefStatus) =>
+  status === 'pending_admin_review';
+
+export type DesignerFeedbackNotes = {
+  clientRevisionNote: string | null;
+  adminRejectionNote: string | null;
+};
+
+export const getDesignerFeedbackNotes = (
+  source?: Partial<Brief> | Record<string, unknown> | null,
+): DesignerFeedbackNotes => {
+  if (!source) {
+    return { clientRevisionNote: null, adminRejectionNote: null };
+  }
+
+  const record = source as Record<string, unknown>;
+  const statusProgress =
+    record.status_progress && typeof record.status_progress === 'object'
+      ? (record.status_progress as Record<string, unknown>)
+      : null;
+
+  const readNote = (...values: unknown[]) => {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return null;
+  };
+
+  return {
+    clientRevisionNote: readNote(
+      record.revision_note,
+      record.latest_revision_note,
+      statusProgress?.revision_note,
+      statusProgress?.client_revision_note,
+    ),
+    adminRejectionNote: readNote(
+      record.rejection_note,
+      record.admin_rejection_note,
+      record.latest_rejection_note,
+      statusProgress?.rejection_note,
+      statusProgress?.admin_rejection_note,
+    ),
+  };
+};
+
+export const hasDesignerFeedbackNotes = (source?: Partial<Brief> | Record<string, unknown> | null) => {
+  const notes = getDesignerFeedbackNotes(source);
+  return Boolean(notes.clientRevisionNote || notes.adminRejectionNote);
+};
 
 export const formatBriefPriority = (priority?: string) =>
   priority ? priority.charAt(0).toUpperCase() + priority.slice(1) : 'Medium';
@@ -187,6 +260,92 @@ export const updateBriefPriority = async (
     { priority },
     getAuthConfig(token),
   );
+  return res.data;
+};
+
+export const acceptBrief = async (token: string | null, id: string) => {
+  const res = await axios.post(`${apiUrl}/briefs/${id}/accept`, {}, getAuthConfig(token));
+  return res.data;
+};
+
+export const requestBriefRevision = async (
+  token: string | null,
+  id: string,
+  revisionNote: string,
+) => {
+  const res = await axios.post(
+    `${apiUrl}/briefs/${id}/request-revision`,
+    { revision_note: revisionNote.trim() },
+    getAuthConfig(token),
+  );
+  return res.data;
+};
+
+export const REVIEWABLE_BRIEF_STATUSES: BriefStatus[] = ['under_review'];
+
+export const canReviewBrief = (status?: BriefStatus) =>
+  !!status && REVIEWABLE_BRIEF_STATUSES.includes(status);
+
+export type AdminBriefsQuery = {
+  status?: string;
+  limit?: number;
+};
+
+export const fetchAdminBriefs = async (
+  token: string | null,
+  query: AdminBriefsQuery = {},
+): Promise<Brief[]> => {
+  const res = await axios.get(`${apiUrl}/admin/briefs`, {
+    ...getAuthConfig(token),
+    params: {
+      status: query.status || undefined,
+      limit: query.limit || undefined,
+    },
+  });
+  return res.data.items || [];
+};
+
+export const approveAdminDelivery = async (token: string | null, id: string) => {
+  const res = await axios.post(
+    `${apiUrl}/admin/briefs/${id}/approve-delivery`,
+    {},
+    getAuthConfig(token),
+  );
+  if (res.data?.success === false) {
+    throw new Error(res.data?.message || 'Failed to approve delivery');
+  }
+  return res.data;
+};
+
+export const rejectAdminDelivery = async (
+  token: string | null,
+  id: string,
+  rejectionNote?: string,
+) => {
+  const res = await axios.post(
+    `${apiUrl}/admin/briefs/${id}/reject-delivery`,
+    rejectionNote?.trim() ? { rejection_note: rejectionNote.trim() } : {},
+    getAuthConfig(token),
+  );
+  if (res.data?.success === false) {
+    throw new Error(res.data?.message || 'Failed to reject delivery');
+  }
+  return res.data;
+};
+
+export const assignDesignerToBrief = async (
+  token: string | null,
+  briefId: string,
+  designerId: string,
+) => {
+  const res = await axios.patch(
+    `${apiUrl}/admin/briefs/${briefId}/assign-designer`,
+    { designer_id: designerId },
+    getAuthConfig(token),
+  );
+  if (res.data?.success === false) {
+    throw new Error(res.data?.message || 'Failed to assign designer');
+  }
   return res.data;
 };
 

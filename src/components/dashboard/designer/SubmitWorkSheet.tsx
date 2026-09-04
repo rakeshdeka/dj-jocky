@@ -44,7 +44,7 @@ const SubmitWorkSheet = ({
     try {
       setIsSubmitting(true);
       await submitDesignerWork(token, briefId, files);
-      toast.success('Work submitted for review');
+      toast.success('Work submitted for admin review');
       setFiles(null);
       onSuccess?.();
       onClose();
@@ -61,7 +61,7 @@ const SubmitWorkSheet = ({
         <SheetHeader>
           <SheetTitle>Submit Work</SheetTitle>
           <SheetDescription>
-            Upload delivery files and mark this brief as under review
+            Upload delivery files to submit for admin review
             {briefTitle ? ` — ${briefTitle}` : ''}.
           </SheetDescription>
         </SheetHeader>

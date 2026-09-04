@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import Search from '../../../components/dashboard/ui/Search';
@@ -25,6 +26,7 @@ import BriefFilesPanel from '../../../components/dashboard/briefs/BriefFilesPane
 import SubmitWorkSheet from '../../../components/dashboard/designer/SubmitWorkSheet';
 
 const Briefs = () => {
+  const navigate = useNavigate();
   const { token } = useSelector((state: RootState) => state.auth);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -137,6 +139,7 @@ const Briefs = () => {
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="assigned">Assigned</SelectItem>
             <SelectItem value="in_progress">In progress</SelectItem>
+            <SelectItem value="pending_admin_review">Awaiting admin review</SelectItem>
             <SelectItem value="under_review">Under review</SelectItem>
             <SelectItem value="revision">Revision</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
@@ -165,6 +168,7 @@ const Briefs = () => {
           setSelectedBrief({ id, title });
           loadFiles(id);
         }}
+        onViewBrief={(id) => navigate(`/designer/briefs/${id}`)}
         role="designer"
         onUploadDelivery={(id, title) => setUploadModal({ id, title })}
         onStartWork={handleStartWork}
