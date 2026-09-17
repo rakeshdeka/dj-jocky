@@ -56,19 +56,46 @@ export const getServiceDisplayName = (service: Pick<IndividualService, 'title' |
 export const getServiceSlugOrId = (service: Pick<IndividualService, '_id' | 'slug'>) =>
   service.slug || service._id;
 
+export const getClientServiceDetailPath = (service: Pick<IndividualService, '_id' | 'slug'>) =>
+  `/client/services/${getServiceSlugOrId(service)}`;
+
 export const getIndividualServiceImage = (
-  service: Pick<IndividualService, 'name' | 'title' | 'image_url'>,
+  service: Pick<IndividualService, 'name' | 'title' | 'image_url' | 'hero'>,
 ) => {
+  if (service.hero?.image?.trim()) return service.hero.image;
   if (service.image_url?.trim()) return service.image_url;
   const name = getServiceDisplayName(service);
   const initial = name.trim().charAt(0).toUpperCase() || 'S';
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=C4FE01&color=000000&size=512&bold=true&format=png`;
 };
 
+export const getServiceHeroDescription = (service: IndividualService) =>
+  service.hero?.description?.trim() ||
+  service.hero?.subtitle?.trim() ||
+  service.shortDescription?.trim() ||
+  '';
+
 export const formatServicePrice = (service: Pick<IndividualService, 'price' | 'currency'>) => {
   const currency = service.currency || 'USD';
   if (currency === 'USD') return `$${service.price.toLocaleString()}`;
   return `${currency} ${service.price.toLocaleString()}`;
+};
+
+export const hasServiceAccess = (service: IndividualService) =>
+  Boolean(
+    service.has_access ||
+      service.is_included_in_subscription ||
+      service.is_purchased_individually,
+  );
+
+/** Show Buy / Add to Cart for individually available services the client does not already have. */
+export const canShowIndividualPurchaseButtons = (service: IndividualService) =>
+  Boolean(service.available_individually && !hasServiceAccess(service));
+
+export const fetchAllServices = async (token: string | null): Promise<IndividualService[]> => {
+  const res = await axios.get(`${apiUrl}/services`, getAuthConfig(token));
+  const items = res.data.items || res.data.services || res.data.data || [];
+  return items.map(parseService).filter(Boolean) as IndividualService[];
 };
 
 export const fetchIndividualServices = async (token: string | null): Promise<IndividualService[]> => {
@@ -87,4 +114,20 @@ export const fetchIndividualService = async (
     throw new Error(res.data?.message || 'Service not found');
   }
   return service;
+};
+
+export const fetchServiceDetail = async (
+  token: string | null,
+  slugOrId: string,
+): Promise<IndividualService> => {
+  try {
+    return await fetchIndividualService(token, slugOrId);
+  } catch {
+    const res = await axios.get(`${apiUrl}/services/${slugOrId}`, getAuthConfig(token));
+    const service = parseService(res.data);
+    if (!service) {
+      throw new Error(res.data?.message || 'Service not found');
+    }
+    return service;
+  }
 };

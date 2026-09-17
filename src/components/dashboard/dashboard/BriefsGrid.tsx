@@ -16,6 +16,7 @@ interface BriefsGridProps {
   onUploadDelivery: (id: string, title: string) => void;
   onStartWork?: (id: string) => void;
   onSubmitWork?: (id: string, title: string) => void;
+  onUploadFinal?: (id: string, title: string) => void;
   updatingBriefId?: string | null;
   onReviewDelivery?: (id: string, title: string) => void;
   onViewBrief?: (id: string) => void;
@@ -32,6 +33,7 @@ const BriefsGrid: React.FC<BriefsGridProps> = ({
   onUploadDelivery,
   onStartWork,
   onSubmitWork,
+  onUploadFinal,
   updatingBriefId = null,
   onReviewDelivery,
   onViewBrief,
@@ -102,6 +104,7 @@ const BriefsGrid: React.FC<BriefsGridProps> = ({
           onUploadDelivery={onUploadDelivery}
           onStartWork={onStartWork}
           onSubmitWork={onSubmitWork}
+          onUploadFinal={onUploadFinal}
           isUpdatingStatus={updatingBriefId === brief._id}
           onReviewDelivery={onReviewDelivery}
           onViewBrief={onViewBrief}

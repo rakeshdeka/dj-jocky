@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import { Input } from '../../../components/dashboard/ui/input';
 import {
@@ -20,7 +20,6 @@ import {
 import { format } from 'date-fns';
 import { CalendarIcon, Upload, Loader2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import axios from 'axios';
 import { toast } from 'sonner';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
@@ -31,8 +30,12 @@ import {
   type BriefFormValues,
   updateBrief,
 } from '../../../lib/briefs-api';
-
-const apiUrl = import.meta.env.VITE_API_URL;
+import {
+  fetchServiceDropdown,
+  getDropdownServiceLabel,
+  isDropdownServiceSelectable,
+  type DropdownService,
+} from '../../../lib/services-api';
 
 const emptyFormValues: BriefFormValues = {
   title: '',
@@ -57,7 +60,7 @@ const CreateBrief = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isEditable, setIsEditable] = useState(true);
 
-  const [services, setServices] = useState<any[]>([]);
+  const [services, setServices] = useState<DropdownService[]>([]);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [allFiles, setAllFiles] = useState<File[]>([]);
 
@@ -66,25 +69,21 @@ const CreateBrief = () => {
   };
 
   useEffect(() => {
-    const fetchServices = async () => {
+    const loadServices = async () => {
+      if (!token) return;
       try {
-        const res = await axios.get(`${apiUrl}/services/dropdown`, {
-          headers: { Authorization: `Bearer ${token}` },
-          withCredentials: true,
-        });
-        const allServices = res.data.categories.flatMap((cat: any) =>
-          (cat.services || []).map((srv: any) => ({
-            ...srv,
-            id: srv.id || srv._id,
-          })),
-        );
-        setServices(allServices);
+        setServices(await fetchServiceDropdown(token));
       } catch {
         toast.error('Failed to load services');
       }
     };
-    if (token) fetchServices();
+    loadServices();
   }, [token]);
+
+  const selectableServices = useMemo(
+    () => services.filter((service) => isDropdownServiceSelectable(service)),
+    [services],
+  );
 
   const loadBrief = useCallback(async () => {
     if (!isEditMode || !id) return;
@@ -103,6 +102,27 @@ const CreateBrief = () => {
       setFormValues(values);
       setOriginalValues(values);
       setIsEditable(true);
+
+      const serviceRef = brief.service_id;
+      const serviceId =
+        typeof serviceRef === 'string' ? serviceRef : serviceRef?._id || '';
+      const serviceName =
+        typeof serviceRef === 'object' && serviceRef?.name ? serviceRef.name : 'Current service';
+
+      if (serviceId) {
+        setServices((prev) => {
+          if (prev.some((service) => service.id === serviceId)) return prev;
+          return [
+            ...prev,
+            {
+              id: serviceId,
+              _id: serviceId,
+              name: serviceName,
+              can_create_brief: false,
+            },
+          ];
+        });
+      }
 
       if (brief.delivery_date) {
         setDate(new Date(brief.delivery_date));
@@ -132,6 +152,19 @@ const CreateBrief = () => {
     if (!formValues.title.trim() || !formValues.description.trim()) {
       toast.error('Title and Description are required');
       return;
+    }
+
+    if (!isEditMode && !formValues.service_id) {
+      toast.error('Please select a service');
+      return;
+    }
+
+    if (!isEditMode) {
+      const selected = services.find((service) => service.id === formValues.service_id);
+      if (!selected || !isDropdownServiceSelectable(selected)) {
+        toast.error('Selected service is not available for a new brief');
+        return;
+      }
     }
 
     if (isEditMode && !isEditable) {
@@ -229,17 +262,37 @@ const CreateBrief = () => {
                 <Select
                   value={formValues.service_id}
                   onValueChange={(value) => updateField('service_id', value)}
-                  disabled={!isEditable}
+                  disabled={!isEditable || isEditMode}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select service" />
                   </SelectTrigger>
                   <SelectContent>
-                    {services.map((srv: any) => (
-                      <SelectItem key={srv.id} value={srv.id}>{srv.name}</SelectItem>
+                    {services.map((service) => (
+                      <SelectItem
+                        key={service.id}
+                        value={service.id}
+                        disabled={!isDropdownServiceSelectable(service)}
+                      >
+                        {getDropdownServiceLabel(service)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+
+                {!isEditMode && selectableServices.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No services available for a new brief.{' '}
+                    <Link to="/client/services" className="text-[#C4FE01] hover:underline">
+                      Purchase an individual service
+                    </Link>{' '}
+                    or{' '}
+                    <Link to="/client/plans" className="text-[#C4FE01] hover:underline">
+                      view subscription plans
+                    </Link>
+                    .
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

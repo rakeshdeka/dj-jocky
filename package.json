@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-     "build": "vite build",
+    "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -87,7 +87,6 @@
       "react": "$react"
     }
   },
-  
   "devDependencies": {
     "@eslint/js": "^9.21.0",
     "@tailwindcss/typography": "^0.5.16",

@@ -25,6 +25,7 @@ import {
   canAdminReviewDelivery,
   type Brief,
 } from '../../../lib/briefs-api';
+import { countDeliverableFiles, fetchBriefFilesBundle } from '../../../lib/files-api';
 import AdminDeliveryReviewPanel from '../../../components/dashboard/admin/AdminDeliveryReviewPanel';
 
 const statusVariant = (status?: string) => {
@@ -33,6 +34,7 @@ const statusVariant = (status?: string) => {
       return 'default';
     case 'in_progress':
     case 'under_review':
+    case 'awaiting_final_delivery':
       return 'secondary';
     case 'pending_admin_review':
       return 'destructive';
@@ -84,7 +86,14 @@ const AdminProjectDetail = () => {
     try {
       setIsLoading(true);
       setLoadError(null);
-      setBrief(await fetchBrief(token, briefId));
+      const briefData = await fetchBrief(token, briefId);
+      const files = await fetchBriefFilesBundle(token, briefId);
+      setBrief({
+        ...briefData,
+        reference_files: files.reference_files,
+        delivery_files: files.delivery_files,
+        deliverables: files.deliverables,
+      });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to load brief details';
       setLoadError(message);
@@ -249,7 +258,9 @@ const AdminProjectDetail = () => {
             <CardContent>
               <BriefFilesPanel
                 referenceFiles={brief.reference_files || []}
-                deliveryFiles={brief.delivery_files || []}
+                deliverables={brief.deliverables ?? null}
+                viewerRole="admin"
+                briefStatus={brief.status}
               />
             </CardContent>
           </Card>
@@ -306,8 +317,12 @@ const AdminProjectDetail = () => {
                 <span className="font-medium">{brief.reference_files?.length ?? 0}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Delivery files</span>
-                <span className="font-medium">{brief.delivery_files?.length ?? 0}</span>
+                <span className="text-muted-foreground">Deliverables</span>
+                <span className="font-medium">
+                  {brief.deliverables
+                    ? countDeliverableFiles(brief.deliverables)
+                    : brief.delivery_files?.length ?? 0}
+                </span>
               </div>
             </CardContent>
           </Card>

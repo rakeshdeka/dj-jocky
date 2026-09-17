@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { toMessageText } from './admin-settings-shared';
-import { uploadDeliveryFiles } from './files-api';
+import { uploadDeliveryFiles, uploadFinalDelivery } from './files-api';
 
 export const apiBaseUrl = import.meta.env.VITE_API_URL;
 
@@ -10,6 +10,7 @@ export type DesignerBriefStatus =
   | 'in_progress'
   | 'pending_admin_review'
   | 'under_review'
+  | 'awaiting_final_delivery'
   | 'revision'
   | 'completed';
 
@@ -33,6 +34,8 @@ export type DesignerBrief = {
   latest_revision_note?: string;
   latest_rejection_note?: string;
   admin_rejection_note?: string;
+  revision_count?: number;
+  revision_limit?: number | null;
 };
 
 export type DesignerDashboardCounts = {
@@ -186,3 +189,10 @@ export const canSubmitDesignerWork = (status: string) => status === 'in_progress
 
 export const isDesignerAwaitingAdminReview = (status: string) =>
   status === 'pending_admin_review';
+
+export const canUploadFinalDelivery = (status: string) =>
+  status === 'awaiting_final_delivery';
+
+export const submitFinalDelivery = async (token: string, briefId: string, file: File) =>
+  uploadFinalDelivery(token, briefId, file);
+

@@ -24,6 +24,7 @@ import {
 import { fetchBriefFilesBundle, uploadDeliveryFiles, type BriefFilesBundle } from '../../../lib/files-api';
 import BriefFilesPanel from '../../../components/dashboard/briefs/BriefFilesPanel';
 import SubmitWorkSheet from '../../../components/dashboard/designer/SubmitWorkSheet';
+import SubmitFinalDeliverySheet from '../../../components/dashboard/designer/SubmitFinalDeliverySheet';
 
 const Briefs = () => {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ const Briefs = () => {
 
   const [uploadModal, setUploadModal] = useState<{ id: string; title: string } | null>(null);
   const [submitWorkModal, setSubmitWorkModal] = useState<{ id: string; title: string } | null>(null);
+  const [finalUploadModal, setFinalUploadModal] = useState<{ id: string; title: string } | null>(null);
   const [uploadFile, setUploadFile] = useState<FileList | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -141,6 +143,7 @@ const Briefs = () => {
             <SelectItem value="in_progress">In progress</SelectItem>
             <SelectItem value="pending_admin_review">Awaiting admin review</SelectItem>
             <SelectItem value="under_review">Under review</SelectItem>
+            <SelectItem value="awaiting_final_delivery">Awaiting final delivery</SelectItem>
             <SelectItem value="revision">Revision</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
@@ -173,6 +176,7 @@ const Briefs = () => {
         onUploadDelivery={(id, title) => setUploadModal({ id, title })}
         onStartWork={handleStartWork}
         onSubmitWork={handleSubmitWorkOpen}
+        onUploadFinal={(id, title) => setFinalUploadModal({ id, title })}
         updatingBriefId={updatingBriefId}
       />
 
@@ -186,7 +190,9 @@ const Briefs = () => {
           <div className="mt-6">
             <BriefFilesPanel
               referenceFiles={briefFiles.reference_files}
-              deliveryFiles={briefFiles.delivery_files}
+              deliverables={briefFiles.deliverables}
+              viewerRole="designer"
+              briefStatus={briefs.find((b) => b._id === selectedBrief?.id)?.status}
               isLoading={isFilesLoading}
             />
           </div>
@@ -199,6 +205,15 @@ const Briefs = () => {
         briefTitle={submitWorkModal?.title}
         token={token}
         onClose={() => setSubmitWorkModal(null)}
+        onSuccess={loadBriefs}
+      />
+
+      <SubmitFinalDeliverySheet
+        open={!!finalUploadModal}
+        briefId={finalUploadModal?.id ?? null}
+        briefTitle={finalUploadModal?.title}
+        token={token}
+        onClose={() => setFinalUploadModal(null)}
         onSuccess={loadBriefs}
       />
 

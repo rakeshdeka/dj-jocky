@@ -3,7 +3,7 @@ import { MoreHorizontal, Edit2, Trash2, FileText, Loader2, MessageSquare, Clipbo
 import { useNavigate } from "react-router-dom"
 import DesignerBriefActions from '../designer/DesignerBriefActions'
 import { Button } from '../ui/button'
-import { canReviewBrief, formatBriefStatus, type BriefStatus } from '../../../lib/briefs-api';
+import { canEditBrief, canReviewBrief, formatBriefStatus, type BriefStatus } from '../../../lib/briefs-api';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,7 @@ interface BriefCardProps {
   onUploadDelivery: (id: string, title: string) => void
   onStartWork?: (id: string) => void
   onSubmitWork?: (id: string, title: string) => void
+  onUploadFinal?: (id: string, title: string) => void
   isUpdatingStatus?: boolean
   onReviewDelivery?: (id: string, title: string) => void
   onViewBrief?: (id: string) => void
@@ -43,6 +44,7 @@ const BriefCard: React.FC<BriefCardProps> = ({
   onUploadDelivery,
   onStartWork,
   onSubmitWork,
+  onUploadFinal,
   isUpdatingStatus = false,
   onReviewDelivery,
   onViewBrief,
@@ -113,7 +115,7 @@ const BriefCard: React.FC<BriefCardProps> = ({
                     <FileText className="mr-2 h-4 w-4" /> View Files
                   </DropdownMenuItem>
 
-                  {!needsReview && (
+                  {canEditBrief(status as BriefStatus) && (
                     <DropdownMenuItem onClick={() => navigate(`/client/edit-brief/${id}`)}>
                       <Edit2 className="mr-2 h-4 w-4" /> Edit
                     </DropdownMenuItem>
@@ -168,12 +170,13 @@ const BriefCard: React.FC<BriefCardProps> = ({
             <ClipboardCheck className="h-4 w-4 mr-2" />
             Review Delivery
           </Button>
-        ) : role === 'designer' && (onStartWork || onSubmitWork) ? (
+        ) : role === 'designer' && (onStartWork || onSubmitWork || onUploadFinal) ? (
           <DesignerBriefActions
             status={status}
             isUpdating={isUpdatingStatus}
             onStartWork={onStartWork ? () => onStartWork(id) : undefined}
             onSubmitWork={onSubmitWork ? () => onSubmitWork(id, title) : undefined}
+            onUploadFinal={onUploadFinal ? () => onUploadFinal(id, title) : undefined}
             className="w-full"
           />
         ) : null}

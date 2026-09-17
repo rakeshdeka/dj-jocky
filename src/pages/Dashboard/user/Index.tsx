@@ -3,12 +3,11 @@ import { useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchMyBriefs, type Brief, type BriefStatus } from '../../../lib/briefs-api';
+import { fetchMyBriefs, type Brief } from '../../../lib/briefs-api';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import Search from '../../../components/dashboard/ui/Search';
 import SortDropdown from '../../../components/dashboard/ui/SortDropdown';
 import BriefsGrid from '../../../components/dashboard/dashboard/BriefsGrid';
-import ClientDeliveryReviewSheet from '../../../components/dashboard/briefs/ClientDeliveryReviewSheet';
 import { Button } from '../../../components/dashboard/ui/button';
 import { RootState } from '../../../store/store';
 
@@ -26,11 +25,6 @@ const Index = () => {
   const [sortBy, setSortBy] = useState('date-created');
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [reviewBrief, setReviewBrief] = useState<{
-    id: string;
-    title: string;
-    mode: 'review' | 'revision';
-  } | null>(null);
 
   const fetchBriefs = async () => {
     try {
@@ -47,14 +41,8 @@ const Index = () => {
     if (token) fetchBriefs();
   }, [token]);
 
-  const handleReviewDelivery = (id: string, title: string) => {
-    setReviewBrief({ id, title, mode: 'review' });
-  };
-
-  const handleReviewSuccess = (briefId: string, newStatus: BriefStatus) => {
-    setBriefs((prev) =>
-      prev.map((brief) => (brief._id === briefId ? { ...brief, status: newStatus } : brief)),
-    );
+  const handleReviewDelivery = (id: string) => {
+    navigate(`/client/briefs/${id}`);
   };
 
   const handleDeleted = (id: string) => {
@@ -93,18 +81,6 @@ const Index = () => {
         onReviewDelivery={handleReviewDelivery}
         role="client"
         onUploadDelivery={() => {}}
-      />
-
-      <ClientDeliveryReviewSheet
-        open={!!reviewBrief}
-        briefId={reviewBrief?.id ?? null}
-        briefTitle={reviewBrief?.title}
-        token={token}
-        initialMode={reviewBrief?.mode}
-        onClose={() => setReviewBrief(null)}
-        onSuccess={(newStatus) => {
-          if (reviewBrief) handleReviewSuccess(reviewBrief.id, newStatus);
-        }}
       />
     </MainLayout>
   );

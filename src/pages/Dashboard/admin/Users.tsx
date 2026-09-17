@@ -30,9 +30,11 @@ import {
   AlertDialogTitle,
 } from '../../../components/dashboard/ui/alert-dialog';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Filter, Loader2, Pencil, Search as SearchIcon, Trash2 } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { Eye, Filter, Loader2, Pencil, Plus, Search as SearchIcon, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { RootState } from '../../../store/store';
 
 type UserRole = 'admin' | 'client' | 'designer';
 type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended';
@@ -104,6 +106,7 @@ const emptyEditForm = (): EditForm => ({
 const AdminUsers: React.FC = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
+  const { isSuperAdmin } = useSelector((state: RootState) => state.adminAccess);
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -306,11 +309,19 @@ const AdminUsers: React.FC = () => {
 
   return (
     <MainLayout>
-      <div className="mb-8">
-        <h1 className="text-sm font-bold mb-1 tracking-[0.2em]">USERS</h1>
-        <p className="text-muted-foreground text-sm">
-          View and manage all users on the platform
-        </p>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-sm font-bold mb-1 tracking-[0.2em]">USERS</h1>
+          <p className="text-muted-foreground text-sm">
+            {isSuperAdmin
+              ? 'View and manage all users on the platform'
+              : 'Manage client and designer accounts (sub-admin scope)'}
+          </p>
+        </div>
+        <Button onClick={() => navigate('/admin/users/add')} className="gap-2 shrink-0">
+          <Plus className="h-4 w-4" />
+          Add Internal User
+        </Button>
       </div>
 
       <Card className="bg-secondary/30 border-border mb-8">
@@ -342,7 +353,7 @@ const AdminUsers: React.FC = () => {
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="client">Client</SelectItem>
                   <SelectItem value="designer">Designer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                 </SelectContent>
               </Select>
 
@@ -609,7 +620,7 @@ const AdminUsers: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="client">Client</SelectItem>
                   <SelectItem value="designer">Designer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                 </SelectContent>
               </Select>
             </div>

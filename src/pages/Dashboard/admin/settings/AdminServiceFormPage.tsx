@@ -273,8 +273,11 @@ export default function AdminServiceFormPage() {
                   disabled={disabled}
                 />
                 <Label htmlFor="available-individually" className="text-xs cursor-pointer">
-                  Available individually
+                  Available for individual purchase
                 </Label>
+                <p className="text-[10px] text-muted-foreground pl-6">
+                  When enabled, this service appears in subscription plans and the individual shop.
+                </p>
               </div>
             </div>
 

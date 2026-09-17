@@ -17,6 +17,7 @@ import {
   CreditCard,
   Package,
   Shield,
+  Users,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { SidebarProps } from './MainLayout';
@@ -56,6 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse }) => {
     { label: 'Meetings', icon: Grid, path: '/client/meetings' },
     { label: 'Plans', icon: LayoutDashboard, path: '/client/plans' },
     { label: 'Services', icon: Layers, path: '/client/services' },
+    { label: 'Team', icon: Users, path: '/client/team' },
   ];
 
   const isActive = (path: string) => {

@@ -4,9 +4,9 @@ import {
   ArrowLeft,
   CheckCircle2,
   Download,
-  Eye,
   FileText,
   Loader2,
+  RefreshCw,
   RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,18 +16,27 @@ import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
 import {
   acceptBrief,
+  canRequestRevision,
   canReviewBrief,
-  canClientSeeDeliveryFiles,
+  formatRevisionsRemainingLabel,
+  getClientStatusMessage,
+  isAwaitingFinalDelivery,
   requestBriefRevision,
   formatBriefStatus,
   type BriefStatus,
   type BriefStatusRole,
   type DesignerFeedbackNotes as DesignerFeedbackNotesData,
 } from '../../../lib/briefs-api';
-import { getBriefFileName, type BriefFile } from '../../../lib/files-api';
+import {
+  filterDeliverablesForViewer,
+  getDeliverableStageSections,
+  type BriefDeliverables,
+  type BriefFile,
+} from '../../../lib/files-api';
 import type { StatusProgress } from '../messaging/ConversationView';
 import DesignerBriefActions from '../designer/DesignerBriefActions';
 import DesignerFeedbackNotes from '../designer/DesignerFeedbackNotes';
+import VersionedFilesList from '../briefs/VersionedFilesList';
 import ProgressMessageComposer from './ProgressMessageComposer';
 
 export type ProgressMessage = {
@@ -53,6 +62,7 @@ type ProgressDeliveryPanelProps = {
   isClient: boolean;
   isDesigner: boolean;
   deliveryFiles: BriefFile[];
+  deliverables?: BriefDeliverables | null;
   messages: ProgressMessage[];
   statusProgress?: StatusProgress | null;
   isLoading: boolean;
@@ -63,9 +73,12 @@ type ProgressDeliveryPanelProps = {
   onSendMessage: (content: string, files?: File[]) => void;
   onStartWork?: () => void;
   onSubmitWork?: () => void;
+  onUploadFinal?: () => void;
   onStatusChange?: (status: BriefStatus) => void;
   designerFeedbackNotes?: DesignerFeedbackNotesData | null;
   briefUpdatedAt?: string;
+  revisionCount?: number;
+  revisionLimit?: number | null;
 };
 
 const getMessageAttachments = (message: ProgressMessage) => {
@@ -118,6 +131,7 @@ const ProgressDeliveryPanel = ({
   isClient,
   isDesigner,
   deliveryFiles,
+  deliverables,
   messages,
   statusProgress,
   isLoading,
@@ -128,30 +142,61 @@ const ProgressDeliveryPanel = ({
   onSendMessage,
   onStartWork,
   onSubmitWork,
+  onUploadFinal,
   onStatusChange,
   designerFeedbackNotes,
   briefUpdatedAt,
+  revisionCount = 0,
+  revisionLimit,
 }: ProgressDeliveryPanelProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [revisionNote, setRevisionNote] = useState('');
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const canReview = isClient && canReviewBrief(briefStatus as BriefStatus);
+  const revisionsRemainingLabel = formatRevisionsRemainingLabel(revisionCount, revisionLimit);
+  const canRequestMoreRevisions = canRequestRevision(revisionCount, revisionLimit);
+  const clientStatusMessage = isClient ? getClientStatusMessage(briefStatus as BriefStatus) : null;
+  const isPreparingFinal = isClient && isAwaitingFinalDelivery(briefStatus as BriefStatus);
   const statusRole: BriefStatusRole = isDesigner ? 'designer' : isClient ? 'client' : 'admin';
-  const visibleDeliveryFiles =
-    isClient && !canClientSeeDeliveryFiles(briefStatus as BriefStatus) ? [] : deliveryFiles;
-  const latestVersion = visibleDeliveryFiles.reduce((max, file) => Math.max(max, file.version ?? 0), 0);
+  const filteredDeliverables =
+    deliverables && isClient
+      ? filterDeliverablesForViewer(deliverables, 'client', briefStatus)
+      : deliverables;
+  const stageSections = filteredDeliverables
+    ? getDeliverableStageSections(filteredDeliverables, { showEmptyStages: isDesigner })
+    : [];
+  const visibleDeliveryFiles = filteredDeliverables
+    ? stageSections.flatMap((section) => section.files)
+    : deliveryFiles;
+  const previewFiles = filteredDeliverables?.preview.files ?? deliverables?.preview.files ?? [];
+  const reviewFiles = canReview ? previewFiles : visibleDeliveryFiles;
+  const latestVersion = reviewFiles.reduce((max, file) => Math.max(max, file.version ?? 0), 0);
+
+  const sortedMessages = [...messages].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleDownloadAll = () => {
-    if (visibleDeliveryFiles.length === 0) return;
-    visibleDeliveryFiles.forEach((file) => window.open(file.file_url, '_blank', 'noopener,noreferrer'));
-    toast.success(`Opening ${visibleDeliveryFiles.length} file${visibleDeliveryFiles.length > 1 ? 's' : ''}`);
+    if (reviewFiles.length === 0) return;
+    reviewFiles.forEach((file) => window.open(file.file_url, '_blank', 'noopener,noreferrer'));
+    toast.success(`Opening ${reviewFiles.length} file${reviewFiles.length > 1 ? 's' : ''}`);
   };
 
   const handleAccept = async () => {
@@ -159,8 +204,8 @@ const ProgressDeliveryPanel = ({
     try {
       setIsAccepting(true);
       await acceptBrief(token, briefId);
-      toast.success('Delivery approved');
-      onStatusChange?.('completed');
+      toast.success('Preview accepted — preparing your final files');
+      onStatusChange?.('awaiting_final_delivery');
       onRefresh();
     } catch (error: unknown) {
       const message =
@@ -233,14 +278,28 @@ const ProgressDeliveryPanel = ({
           </div>
         </div>
 
-        {isDesigner && (
-          <DesignerBriefActions
-            status={briefStatus}
-            isUpdating={isUpdatingStatus}
-            onStartWork={onStartWork}
-            onSubmitWork={onSubmitWork}
-          />
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh thread"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+
+          {isDesigner && (
+            <DesignerBriefActions
+              status={briefStatus}
+              isUpdating={isUpdatingStatus}
+              onStartWork={onStartWork}
+              onSubmitWork={onSubmitWork}
+              onUploadFinal={onUploadFinal}
+            />
+          )}
+        </div>
       </div>
 
       {isDesigner && designerFeedbackNotes && (
@@ -249,11 +308,19 @@ const ProgressDeliveryPanel = ({
         </div>
       )}
 
-      {(visibleDeliveryFiles.length > 0 || isDesigner || canReview) && (
+      {(reviewFiles.length > 0 || isDesigner || canReview || isPreparingFinal || (isClient && briefStatus === 'completed')) && (
       <div className="shrink-0 sticky top-0 z-10 border-b border-border/60 bg-card/95 backdrop-blur-md px-4 sm:px-6 py-4 space-y-3">
+        {clientStatusMessage && (
+          <div className="rounded-lg border border-[#C4FE01]/30 bg-[#C4FE01]/10 px-4 py-3">
+            <p className="text-xs font-semibold text-[#C4FE01]">{clientStatusMessage}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Your designer is packaging the final deliverables. You&apos;ll be notified when ready.
+            </p>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Delivery Files
+            Deliverables
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -261,7 +328,7 @@ const ProgressDeliveryPanel = ({
               size="sm"
               className="h-8 text-xs"
               onClick={handleDownloadAll}
-              disabled={visibleDeliveryFiles.length === 0}
+              disabled={reviewFiles.length === 0}
             >
               <Download className="h-3.5 w-3.5 mr-1.5" />
               Download all
@@ -272,20 +339,26 @@ const ProgressDeliveryPanel = ({
                   size="sm"
                   className="h-8 text-xs bg-[#C4FE01] hover:bg-[#b2e600] text-black"
                   onClick={handleAccept}
-                  disabled={isAccepting || visibleDeliveryFiles.length === 0}
+                  disabled={isAccepting || previewFiles.length === 0}
                 >
                   {isAccepting ? (
                     <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   ) : (
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                   )}
-                  Approve
+                  Approve Preview
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs"
                   onClick={() => setShowRevisionForm((prev) => !prev)}
+                  disabled={!canRequestMoreRevisions}
+                  title={
+                    canRequestMoreRevisions
+                      ? undefined
+                      : 'No revisions remaining for this brief'
+                  }
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                   Request changes
@@ -295,46 +368,34 @@ const ProgressDeliveryPanel = ({
           </div>
         </div>
 
-        {visibleDeliveryFiles.length > 0 ? (
-          <div className="flex gap-3 overflow-x-auto pb-1">
-            {visibleDeliveryFiles.map((file) => (
-              <div
-                key={file._id || file.id}
-                className="flex items-center gap-3 min-w-[220px] max-w-[280px] border border-border/60 rounded-lg bg-background/60 px-3 py-2.5 shrink-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{getBriefFileName(file)}</p>
-                  {/* {(file.version ?? 0) > 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">v{file.version}</p>
-                  )} */}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <a
-                    href={file.file_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 rounded-md hover:bg-[#C4FE01]/20 transition-colors"
-                    title="Preview"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </a>
-                  <a
-                    href={file.file_url}
-                    download
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 rounded-md hover:bg-[#C4FE01]/20 transition-colors"
-                    title="Download"
-                  >
-                    <Download className="h-4 w-4" />
-                  </a>
-                </div>
+        {canReview && revisionsRemainingLabel && (
+          <p className="text-[11px] text-muted-foreground">{revisionsRemainingLabel}</p>
+        )}
+
+        {stageSections.length > 0 ? (
+          <div className="space-y-4">
+            {stageSections.map((section) => (
+              <div key={section.key} className="space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  {section.label}
+                </p>
+                {section.files.length > 0 ? (
+                  <VersionedFilesList files={section.files} variant="cards" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No files in this stage.</p>
+                )}
               </div>
             ))}
           </div>
+        ) : reviewFiles.length > 0 ? (
+          <VersionedFilesList files={reviewFiles} variant="cards" />
+        ) : isPreparingFinal ? (
+          <p className="text-xs text-muted-foreground">
+            Final files are being prepared and will appear here when ready.
+          </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {isClient && !canClientSeeDeliveryFiles(briefStatus as BriefStatus)
+            {isClient && briefStatus === 'pending_admin_review'
               ? 'Delivery files will appear here once your project is ready for review.'
               : 'No delivery files uploaded yet.'}
           </p>
@@ -378,13 +439,13 @@ const ProgressDeliveryPanel = ({
 
       <ScrollArea className="flex-1 min-h-0">
         <div className="px-4 sm:px-6 py-6 space-y-6">
-          {messages.length === 0 ? (
+          {sortedMessages.length === 0 ? (
             <div className="text-center py-16 border border-dashed border-border rounded-lg">
               <p className="text-sm text-muted-foreground">No messages yet.</p>
               <p className="text-xs text-muted-foreground mt-1">Start the conversation below.</p>
             </div>
           ) : (
-            messages
+            sortedMessages
               .filter(
                 (msg) =>
                   Boolean(msg.message?.trim()) || getMessageAttachments(msg).length > 0,

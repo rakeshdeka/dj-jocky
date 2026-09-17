@@ -4,6 +4,7 @@ export function normalizeStoredRole(role: unknown): UserRole {
   const r = String(role ?? '')
     .toLowerCase()
     .trim()
+  if (r.includes('subadmin') || r.includes('sub_admin') || r.includes('sub-admin')) return 'admin'
   if (r.includes('admin')) return 'admin'
   if (r.includes('designer')) return 'designer'
   return 'client'

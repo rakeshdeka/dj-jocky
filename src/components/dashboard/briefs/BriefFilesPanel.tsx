@@ -1,47 +1,27 @@
-import { Download, FileText, Loader2 } from 'lucide-react';
-import { Badge } from '../ui/badge';
-import { getBriefFileName, type BriefFile } from '../../../lib/files-api';
+import { Loader2 } from 'lucide-react';
+import {
+  filterDeliverablesForViewer,
+  getDeliverableStageSections,
+  type BriefDeliverables,
+  type BriefFile,
+} from '../../../lib/files-api';
+import VersionedFilesList from './VersionedFilesList';
+
+type ViewerRole = 'client' | 'designer' | 'admin';
 
 type BriefFilesPanelProps = {
   referenceFiles: BriefFile[];
-  deliveryFiles: BriefFile[];
+  deliverables?: BriefDeliverables | null;
+  viewerRole?: ViewerRole;
+  briefStatus?: string;
   isLoading?: boolean;
 };
 
-const FileRow = ({ file }: { file: BriefFile }) => (
-  <div className="flex items-center justify-between p-3 border rounded-md hover:border-[#C4FE01] transition gap-3">
-    <div className="flex items-center gap-3 min-w-0">
-      <div className="p-2 bg-muted rounded shrink-0">
-        <FileText className="w-4 h-4" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-medium truncate">{getBriefFileName(file)}</p>
-        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-          {file.uploaded_by && (
-            <span className="text-[10px] text-muted-foreground capitalize">{file.uploaded_by}</span>
-          )}
-          {file.version != null && file.version > 0 && (
-            <Badge variant="secondary" className="text-[9px] h-4 px-1">
-              v{file.version}
-            </Badge>
-          )}
-          {file.file_type && (
-            <span className="text-[10px] text-muted-foreground uppercase">{file.file_type}</span>
-          )}
-        </div>
-      </div>
-    </div>
-
-    <a
-      href={file.file_url}
-      target="_blank"
-      rel="noreferrer"
-      className="p-2 hover:bg-[#C4FE01] rounded shrink-0"
-    >
-      <Download className="w-4 h-4" />
-    </a>
-  </div>
-);
+const STAGE_DESCRIPTIONS: Record<string, string> = {
+  submitted: 'Designer uploads awaiting admin review',
+  preview: 'Approved deliverables ready for client review',
+  final: 'Accepted final deliverables',
+};
 
 const FileSection = ({
   title,
@@ -57,23 +37,15 @@ const FileSection = ({
       <h3 className="text-xs font-semibold uppercase tracking-widest">{title}</h3>
       <p className="text-[11px] text-muted-foreground">{description}</p>
     </div>
-    {files.length > 0 ? (
-      <div className="space-y-2">
-        {files.map((file) => (
-          <FileRow key={file._id || file.id} file={file} />
-        ))}
-      </div>
-    ) : (
-      <div className="text-center py-8 border border-dashed rounded-md">
-        <p className="text-xs text-muted-foreground">No files in this section</p>
-      </div>
-    )}
+    <VersionedFilesList files={files} emptyMessage="No files in this section" />
   </div>
 );
 
 const BriefFilesPanel = ({
   referenceFiles,
-  deliveryFiles,
+  deliverables,
+  viewerRole = 'client',
+  briefStatus,
   isLoading = false,
 }: BriefFilesPanelProps) => {
   if (isLoading) {
@@ -85,7 +57,16 @@ const BriefFilesPanel = ({
     );
   }
 
-  const hasAnyFiles = referenceFiles.length > 0 || deliveryFiles.length > 0;
+  const filteredDeliverables = deliverables
+    ? filterDeliverablesForViewer(deliverables, viewerRole, briefStatus)
+    : null;
+
+  const showEmptyStages = viewerRole === 'admin' || viewerRole === 'designer';
+  const stageSections = filteredDeliverables
+    ? getDeliverableStageSections(filteredDeliverables, { showEmptyStages })
+    : [];
+  const hasDeliverables = stageSections.some((section) => section.files.length > 0);
+  const hasAnyFiles = referenceFiles.length > 0 || hasDeliverables;
 
   if (!hasAnyFiles) {
     return (
@@ -97,16 +78,22 @@ const BriefFilesPanel = ({
 
   return (
     <div className="space-y-6">
-      <FileSection
-        title="Reference Files"
-        description="Client-provided assets and brief attachments"
-        files={referenceFiles}
-      />
-      <FileSection
-        title="Delivery Files"
-        description="Designer deliverables submitted for review"
-        files={deliveryFiles}
-      />
+      {referenceFiles.length > 0 && (
+        <FileSection
+          title="Reference Files"
+          description="Client-provided assets and brief attachments"
+          files={referenceFiles}
+        />
+      )}
+
+      {stageSections.map((section) => (
+        <FileSection
+          key={section.key}
+          title={section.label}
+          description={STAGE_DESCRIPTIONS[section.key]}
+          files={section.files}
+        />
+      ))}
     </div>
   );
 };

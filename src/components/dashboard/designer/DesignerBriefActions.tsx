@@ -1,8 +1,9 @@
-import { Loader2, PlayCircle, Send, Clock } from 'lucide-react';
+import { Loader2, Package, PlayCircle, Send, Clock } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   canStartDesignerWork,
   canSubmitDesignerWork,
+  canUploadFinalDelivery,
   isDesignerAwaitingAdminReview,
 } from '../../../lib/designer-api';
 
@@ -11,6 +12,7 @@ type DesignerBriefActionsProps = {
   isUpdating?: boolean;
   onStartWork?: () => void;
   onSubmitWork?: () => void;
+  onUploadFinal?: () => void;
   className?: string;
   size?: 'sm' | 'default';
 };
@@ -20,6 +22,7 @@ const DesignerBriefActions = ({
   isUpdating = false,
   onStartWork,
   onSubmitWork,
+  onUploadFinal,
   className = '',
   size = 'sm',
 }: DesignerBriefActionsProps) => {
@@ -33,6 +36,24 @@ const DesignerBriefActions = ({
       >
         <Clock className="h-3.5 w-3.5 mr-2" />
         Awaiting Admin Review
+      </Button>
+    );
+  }
+
+  if (canUploadFinalDelivery(status) && onUploadFinal) {
+    return (
+      <Button
+        size={size}
+        className={`bg-[#C4FE01] text-black hover:bg-[#b2e600] ${className}`}
+        disabled={isUpdating}
+        onClick={onUploadFinal}
+      >
+        {isUpdating ? (
+          <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+        ) : (
+          <Package className="h-3.5 w-3.5 mr-2" />
+        )}
+        Upload Final ZIP
       </Button>
     );
   }

@@ -21,8 +21,11 @@ import {
   cancelSubscription,
   fetchActiveSubscription,
   formatPlanPrice,
+  getIndividuallyPurchasedServices,
+  getSubscriptionServices,
   type ActiveSubscriptionResponse,
 } from '../../../lib/plans-api';
+import PlanServicesList from '../plans/PlanServicesList';
 
 const SubscriptionDetails = () => {
   const { token } = useSelector((state: RootState) => state.auth);
@@ -31,7 +34,6 @@ const SubscriptionDetails = () => {
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
-
   const loadSubscription = useCallback(async () => {
     if (!token) return;
     try {
@@ -57,6 +59,9 @@ const SubscriptionDetails = () => {
         day: 'numeric',
       })
     : null;
+
+  const subscriptionServices = data ? getSubscriptionServices(data) : [];
+  const purchasedServices = data ? getIndividuallyPurchasedServices(data) : [];
 
   const handleCancelSubscription = async () => {
     if (!token) return;
@@ -169,34 +174,22 @@ const SubscriptionDetails = () => {
             </div>
           )}
 
-          {(data.included_services?.length || data.individual_services?.length) ? (
-            <div className="space-y-3">
-              {data.included_services && data.included_services.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Included services</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {data.included_services.map((service) => (
-                      <Badge key={service._id || service.name} variant="secondary" className="text-xs">
-                        {service.name}
-                      </Badge>
-                    ))}
-                  </div>
+          {(subscriptionServices.length > 0 || purchasedServices.length > 0) && (
+            <div className="space-y-4">
+              {subscriptionServices.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="font-medium">Included in your plan</h4>
+                  <PlanServicesList services={subscriptionServices} />
                 </div>
               )}
-              {data.individual_services && data.individual_services.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Individually purchased</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {data.individual_services.map((service) => (
-                      <Badge key={service._id || service.name} variant="outline" className="text-xs">
-                        {service.name}
-                      </Badge>
-                    ))}
-                  </div>
+              {purchasedServices.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="font-medium">Individually purchased</h4>
+                  <PlanServicesList services={purchasedServices} />
                 </div>
               )}
             </div>
-          ) : null}
+          )}
 
           <div className="pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

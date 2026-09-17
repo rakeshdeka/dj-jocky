@@ -114,6 +114,7 @@ const AdminProjects: React.FC = () => {
                 <SelectItem value="assigned">Assigned</SelectItem>
                 <SelectItem value="in_progress">In Progress</SelectItem>
                 <SelectItem value="under_review">Under Review</SelectItem>
+                <SelectItem value="awaiting_final_delivery">Awaiting Final Delivery</SelectItem>
                 <SelectItem value="revision">Revision</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>

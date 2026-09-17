@@ -203,7 +203,10 @@ const DesignerDashboard = () => {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="font-medium truncate">
-                            {meeting.agenda || `${meeting.meeting_type} meeting`}
+                            {meeting.meeting_type
+                              ? `${meeting.meeting_type.replace(/_/g, ' ')} meeting`
+                              : 'Meeting'}
+                            {meeting.date ? ` · ${new Date(meeting.date).toLocaleDateString()}` : ''}
                             {meeting.client_id?.name ? ` — ${meeting.client_id.name}` : ''}
                           </p>
                           <p className="text-sm text-muted-foreground">

@@ -6,6 +6,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { ArrowLeft, Paperclip, Send, Loader2, CalendarDays, Ghost, FileText, X, Eye, Download, Image as ImageIcon, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { hasRevisionLimit } from '../../../lib/briefs-api';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -56,7 +57,7 @@ export interface BriefDetails {
   status: string;
   priority: string;
   revision_count?: number;
-  revision_limit?: number;
+  revision_limit?: number | null;
 }
 
 export interface ChatAttachment {
@@ -386,7 +387,7 @@ const ConversationView: React.FC<ConversationViewProps> = ({
             <Badge className={`text-[10px] uppercase border-none ${priorityStyles[briefDetails.priority] || 'bg-muted text-muted-foreground'}`}>
               {briefDetails.priority} priority
             </Badge>
-            {(briefDetails.revision_limit ?? 0) > 0 && (
+            {hasRevisionLimit(briefDetails.revision_limit) && (
               <Badge variant="secondary" className="text-[10px] uppercase">
                 Revisions {briefDetails.revision_count ?? 0}/{briefDetails.revision_limit}
               </Badge>

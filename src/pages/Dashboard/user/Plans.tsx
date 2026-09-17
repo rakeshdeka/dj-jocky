@@ -31,12 +31,13 @@ import {
   fetchCountries,
   formatPlanPrice,
   getPlanActionLabel,
-  getPlanServiceNames,
+  getPlanServices,
   type ActiveSubscriptionResponse,
   type ClientPlan,
   type CountryOption,
 } from '../../../lib/plans-api';
 import { checkoutSubscription } from '../../../lib/razorpay-checkout';
+import PlanServicesList from '../../../components/dashboard/plans/PlanServicesList';
 
 export default function Plans() {
   const { token } = useSelector((state: RootState) => state.auth);
@@ -180,7 +181,7 @@ export default function Plans() {
           {plans.map((plan, index) => {
             const isCurrent = Boolean(plan.is_subscribed);
             const actionLabel = getPlanActionLabel(plan);
-            const serviceNames = getPlanServiceNames(plan);
+            const planServices = getPlanServices(plan);
             const checkoutDisabled =
               isProcessing !== null || isCurrent || (!canCheckoutPlan(plan) && !plan.consultation_url);
 
@@ -259,21 +260,12 @@ export default function Plans() {
                       </p>
                     )}
 
-                    {serviceNames.length > 0 && (
-                      <div className="pt-3 border-t border-border/40">
-                        <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2 tracking-widest">
+                    {planServices.length > 0 && (
+                      <div className="pt-3 border-t border-border/40 space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">
                           Included services
                         </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {serviceNames.slice(0, 5).map((name) => (
-                            <span
-                              key={name}
-                              className="text-[9px] bg-muted px-2 py-0.5 rounded-full border border-border/50 font-medium"
-                            >
-                              {name}
-                            </span>
-                          ))}
-                        </div>
+                        <PlanServicesList services={planServices} />
                       </div>
                     )}
                   </CardContent>

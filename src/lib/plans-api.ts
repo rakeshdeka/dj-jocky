@@ -8,6 +8,19 @@ export type PlanFeature = {
   value?: string;
 };
 
+export type PlanService = {
+  _id: string;
+  name: string;
+  slug?: string;
+  price?: number;
+  currency?: string;
+  available_individually?: boolean;
+  has_access?: boolean;
+  is_included_in_subscription?: boolean;
+  is_purchased_individually?: boolean;
+  can_purchase?: boolean;
+};
+
 export type ClientPlan = {
   _id: string;
   name: string;
@@ -20,7 +33,8 @@ export type ClientPlan = {
   billing_interval?: string;
   max_active_requests?: number | null;
   features?: PlanFeature[];
-  services?: Array<string | { _id?: string; id?: string; name?: string }>;
+  services?: Array<string | PlanService | { _id?: string; id?: string; name?: string }>;
+  plan_services?: PlanService[];
   subscription_action?: 'subscribe' | 'switch' | 'current' | string;
   is_subscribed?: boolean;
   checkout_available?: boolean;
@@ -43,6 +57,8 @@ export type ActiveSubscriptionResponse = {
   activePlan?: ClientPlan;
   included_services?: Array<{ _id?: string; name?: string }>;
   individual_services?: Array<{ _id?: string; name?: string }>;
+  subscription_services?: PlanService[];
+  individually_purchased_services?: PlanService[];
   limits?: Record<string, unknown>;
 };
 
@@ -147,14 +163,94 @@ export const fetchCurrencies = async (): Promise<CurrencyOption[]> => {
   return [];
 };
 
-export const getPlanServiceNames = (plan: ClientPlan): string[] => {
-  if (!Array.isArray(plan.services)) return [];
-  return plan.services
-    .map((service) => {
-      if (typeof service === 'string') return service;
-      return service.name || '';
-    })
-    .filter(Boolean);
+export const normalizePlanService = (item: unknown): PlanService | null => {
+  if (!item || typeof item !== 'object') return null;
+  const raw = item as Record<string, unknown>;
+  const id = String(raw._id || raw.id || '');
+  if (!id) return null;
+
+  return {
+    _id: id,
+    name: String(raw.name || raw.title || 'Service'),
+    slug: typeof raw.slug === 'string' ? raw.slug : undefined,
+    price: typeof raw.price === 'number' ? raw.price : undefined,
+    currency: typeof raw.currency === 'string' ? raw.currency : undefined,
+    available_individually: raw.available_individually as boolean | undefined,
+    has_access: raw.has_access as boolean | undefined,
+    is_included_in_subscription: raw.is_included_in_subscription as boolean | undefined,
+    is_purchased_individually: raw.is_purchased_individually as boolean | undefined,
+    can_purchase: raw.can_purchase as boolean | undefined,
+  };
+};
+
+export const getPlanServices = (plan: ClientPlan): PlanService[] => {
+  const rawItems = [
+    ...(Array.isArray(plan.plan_services) ? plan.plan_services : []),
+    ...(Array.isArray(plan.services) ? plan.services : []),
+  ];
+
+  const seen = new Set<string>();
+  const services: PlanService[] = [];
+
+  rawItems.forEach((item) => {
+    if (typeof item === 'string') {
+      if (seen.has(item)) return;
+      seen.add(item);
+      services.push({ _id: item, name: item });
+      return;
+    }
+
+    const normalized = normalizePlanService(item);
+    if (!normalized || seen.has(normalized._id)) return;
+    seen.add(normalized._id);
+    services.push(normalized);
+  });
+
+  return services;
+};
+
+export const getPlanServiceNames = (plan: ClientPlan): string[] =>
+  getPlanServices(plan).map((service) => service.name).filter(Boolean);
+
+export const getSubscriptionServices = (data: ActiveSubscriptionResponse): PlanService[] => {
+  if (Array.isArray(data.subscription_services) && data.subscription_services.length > 0) {
+    return data.subscription_services
+      .map((service) => normalizePlanService(service))
+      .filter(Boolean) as PlanService[];
+  }
+
+  return (data.included_services || [])
+    .map((service) =>
+      normalizePlanService({
+        ...service,
+        is_included_in_subscription: true,
+        has_access: true,
+      }),
+    )
+    .filter(Boolean) as PlanService[];
+};
+
+export const getIndividuallyPurchasedServices = (
+  data: ActiveSubscriptionResponse,
+): PlanService[] => {
+  if (
+    Array.isArray(data.individually_purchased_services) &&
+    data.individually_purchased_services.length > 0
+  ) {
+    return data.individually_purchased_services
+      .map((service) => normalizePlanService(service))
+      .filter(Boolean) as PlanService[];
+  }
+
+  return (data.individual_services || [])
+    .map((service) =>
+      normalizePlanService({
+        ...service,
+        is_purchased_individually: true,
+        has_access: true,
+      }),
+    )
+    .filter(Boolean) as PlanService[];
 };
 
 export const formatPlanPrice = (plan: ClientPlan) => {

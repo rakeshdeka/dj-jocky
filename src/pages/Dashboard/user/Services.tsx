@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import MainLayout from '../../../components/dashboard/layout/MainLayout';
 import { Button } from '../../../components/dashboard/ui/button';
 import {
@@ -20,31 +19,24 @@ import { toast } from 'sonner';
 import { checkoutService } from '../../../lib/razorpay-checkout';
 import { addServiceToCart } from '../../../lib/cart-api';
 import { setCart } from '../../../redux/cartSlice';
-
-type ServiceFromAPI = {
-  _id: string;
-  name: string;
-  description?: string;
-  price: number;
-  image_url?: string;
-  available_individually?: boolean;
-  category_id?: { _id?: string; name?: string };
-};
-
-const apiUrl = import.meta.env.VITE_API_URL;
-
-const getServiceImage = (service: ServiceFromAPI) => {
-  if (service.image_url?.trim()) return service.image_url;
-  const initial = service.name.trim().charAt(0).toUpperCase() || 'S';
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=C4FE01&color=000000&size=512&bold=true&format=png`;
-};
+import type { RootState } from '../../../store/store';
+import {
+  canShowIndividualPurchaseButtons,
+  fetchAllServices,
+  formatServicePrice,
+  getClientServiceDetailPath,
+  getIndividualServiceImage,
+  getServiceDisplayName,
+  hasServiceAccess,
+  type IndividualService,
+} from '../../../lib/individual-services-api';
 
 const Services = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
+  const { token } = useSelector((state: RootState) => state.auth);
 
-  const [services, setServices] = useState<ServiceFromAPI[]>([]);
+  const [services, setServices] = useState<IndividualService[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,11 +44,7 @@ const Services = () => {
   const fetchServices = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await axios.get(`${apiUrl}/services`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        withCredentials: true,
-      });
-      setServices(res.data.items || res.data.services || []);
+      setServices(await fetchAllServices(token));
     } catch {
       toast.error('Failed to load services');
     } finally {
@@ -68,14 +56,19 @@ const Services = () => {
     fetchServices();
   }, [fetchServices]);
 
-  const handleBuyNow = async (service: ServiceFromAPI) => {
-    if (!service.available_individually || !token) return;
+  const openDetail = (service: IndividualService) => {
+    navigate(getClientServiceDetailPath(service));
+  };
+
+  const handleBuyNow = async (service: IndividualService) => {
+    if (!canShowIndividualPurchaseButtons(service) || !token) return;
 
     setIsProcessing(service._id);
-    await checkoutService(token, service._id, service.name, {
+    await checkoutService(token, service._id, getServiceDisplayName(service), {
       onSuccess: () => {
-        toast.success(`Purchased ${service.name} successfully`);
+        toast.success(`Purchased ${getServiceDisplayName(service)} successfully`);
         setIsProcessing(null);
+        fetchServices();
       },
       onDismiss: () => setIsProcessing(null),
       onError: (message) => {
@@ -85,16 +78,20 @@ const Services = () => {
     });
   };
 
-  const handleAddToCart = async (service: ServiceFromAPI) => {
-    if (!service.available_individually) return;
+  const handleAddToCart = async (service: IndividualService) => {
+    if (!canShowIndividualPurchaseButtons(service)) return;
 
     setIsAddingToCart(service._id);
     try {
       const data = await addServiceToCart(token, service._id);
       dispatch(setCart(data.items));
-      toast.success(`${service.name} added to cart`);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to add to cart');
+      toast.success(`${getServiceDisplayName(service)} added to cart`);
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(message || 'Failed to add to cart');
     } finally {
       setIsAddingToCart(null);
     }
@@ -105,7 +102,7 @@ const Services = () => {
       <div className="mb-6 animate-fade-in">
         <h1 className="text-xs font-bold mb-1 tracking-[0.2em] uppercase">AVAILABLE SERVICES</h1>
         <p className="text-muted-foreground text-xs">
-          Browse and purchase additional services to enhance your experience
+          Browse all services — click a card to view details
         </p>
       </div>
 
@@ -124,8 +121,12 @@ const Services = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10 font-sans">
           {services.map((service, index) => {
+            const displayName = getServiceDisplayName(service);
             const isIndividual = service.available_individually ?? false;
+            const hasAccess = hasServiceAccess(service);
+            const showPurchaseButtons = canShowIndividualPurchaseButtons(service);
             const category = service.category_id?.name;
+            const isBusy = isProcessing !== null || isAddingToCart !== null;
 
             return (
               <motion.div
@@ -135,20 +136,23 @@ const Services = () => {
                 transition={{ duration: 0.25, delay: index * 0.08 }}
                 whileHover={{ y: -4 }}
               >
-                <Card className="h-full overflow-hidden relative transition-all duration-300 flex flex-col justify-between border border-border hover:border-[#C4FE01]/50">
+                <Card
+                  className="h-full overflow-hidden relative transition-all duration-300 flex flex-col justify-between border border-border hover:border-[#C4FE01]/50 cursor-pointer"
+                  onClick={() => openDetail(service)}
+                >
                   <div className="aspect-[16/10] bg-muted/30 overflow-hidden">
                     <img
-                      src={getServiceImage(service)}
-                      alt={service.name}
-                      className="w-full h-full object-cover"
+                      src={getIndividualServiceImage(service)}
+                      alt={displayName}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                     />
                   </div>
 
                   <CardHeader className="p-5 pb-2">
                     <div className="flex justify-between items-start gap-2">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <CardTitle className="text-base sm:text-lg uppercase tracking-tight font-bold">
-                          {service.name}
+                          {displayName}
                         </CardTitle>
                         {category && (
                           <CardDescription className="text-[10px] uppercase tracking-widest mt-0.5">
@@ -156,37 +160,61 @@ const Services = () => {
                           </CardDescription>
                         )}
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'whitespace-nowrap text-[10px] px-2 py-0.5',
-                          isIndividual ? 'bg-[#C4FE01]/15 text-[#C4FE01]' : 'bg-muted text-muted-foreground'
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {service.is_included_in_subscription && (
+                          <Badge className="whitespace-nowrap text-[10px] px-2 py-0.5 bg-[#C4FE01]/15 text-[#C4FE01]">
+                            Included in your plan
+                          </Badge>
                         )}
-                      >
-                        {isIndividual ? 'Individual' : 'Plan Only'}
-                      </Badge>
+                        {service.is_purchased_individually && (
+                          <Badge variant="secondary" className="whitespace-nowrap text-[10px] px-2 py-0.5">
+                            Purchased
+                          </Badge>
+                        )}
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            'whitespace-nowrap text-[10px] px-2 py-0.5',
+                            isIndividual ? 'bg-[#C4FE01]/15 text-[#C4FE01]' : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {isIndividual ? 'Individual' : 'Plan Only'}
+                        </Badge>
+                      </div>
                     </div>
                   </CardHeader>
 
                   <CardContent className="px-5 py-2 flex-grow">
-                    {/* {service.description && (
-                      <p className="text-xs text-muted-foreground mb-4 leading-relaxed line-clamp-3">
-                        {service.description}
+                    {service.shortDescription && (
+                      <p className="text-xs text-muted-foreground mb-3 line-clamp-2 leading-relaxed">
+                        {service.shortDescription}
                       </p>
-                    )} */}
+                    )}
                     <p className="text-2xl sm:text-3xl font-bold tracking-tight">
-                      ₹{service.price.toLocaleString()}
+                      {formatServicePrice(service)}
                       <span className="text-muted-foreground text-xs font-normal ml-1">one-time</span>
                     </p>
                   </CardContent>
 
-                  <CardFooter className="p-5 pt-3 border-t border-border/40 gap-2 flex-col sm:flex-row">
-                    {isIndividual ? (
+                  <CardFooter
+                    className="p-5 pt-3 border-t border-border/40 gap-2 flex-col sm:flex-row"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {hasAccess ? (
+                      <Button
+                        variant="secondary"
+                        className="w-full font-bold h-9 uppercase tracking-wider text-[11px]"
+                        disabled
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                        You have access
+                      </Button>
+                    ) : showPurchaseButtons ? (
                       <>
                         <Button
                           className="w-full font-bold h-9 uppercase tracking-wider text-[11px] bg-[#C4FE01] text-black hover:bg-[#b2e600]"
                           onClick={() => handleBuyNow(service)}
-                          disabled={isProcessing !== null || isAddingToCart !== null}
+                          disabled={isBusy}
                         >
                           {isProcessing === service._id ? (
                             <>
@@ -201,7 +229,7 @@ const Services = () => {
                           variant="outline"
                           className="w-full font-bold h-9 uppercase tracking-wider text-[11px]"
                           onClick={() => handleAddToCart(service)}
-                          disabled={isProcessing !== null || isAddingToCart !== null}
+                          disabled={isBusy}
                         >
                           {isAddingToCart === service._id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -213,7 +241,7 @@ const Services = () => {
                           )}
                         </Button>
                       </>
-                    ) : (
+                    ) : !isIndividual ? (
                       <Button
                         variant="secondary"
                         className="w-full font-bold h-9 uppercase tracking-wider text-[11px]"
@@ -222,7 +250,7 @@ const Services = () => {
                         <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                         View Plans
                       </Button>
-                    )}
+                    ) : null}
                   </CardFooter>
                 </Card>
               </motion.div>

@@ -6,6 +6,7 @@ import {
   RouterProvider,
   Route,
   Navigate,
+  Outlet,
 } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute.tsx'
 
@@ -46,6 +47,7 @@ const BriefDetail = lazy(() => import('./pages/Dashboard/BriefDetail'))
 const NotificationHistory = lazy(() => import('./pages/Dashboard/NotificationHistory'))
 const CreateBrief = lazy(() => import('./pages/Dashboard/user/CreateBrief'))
 const Services = lazy(() => import('./pages/Dashboard/user/Services'))
+const ClientServiceDetail = lazy(() => import('./pages/Dashboard/user/ClientServiceDetail'))
 const AssignJobs = lazy(() => import('./pages/Dashboard/user/AssignJobs'))
 const Profile = lazy(() => import('./pages/Dashboard/user/Profile'))
 const ClientSettingsLayout = lazy(() => import('./pages/Dashboard/user/settings/ClientSettingsLayout'))
@@ -54,13 +56,13 @@ const ClientEmailSettingsPage = lazy(() => import('./pages/Dashboard/user/settin
 const ClientPaymentSettingsPage = lazy(() => import('./pages/Dashboard/user/settings/ClientPaymentSettingsPage'))
 const ClientSubscriptionSettingsPage = lazy(() => import('./pages/Dashboard/user/settings/ClientSubscriptionSettingsPage'))
 const ClientSecuritySettingsPage = lazy(() => import('./pages/Dashboard/user/settings/ClientSecuritySettingsPage'))
-const Invite = lazy(() => import('./pages/Dashboard/user/Invite'))
 const StoreClient = lazy(() => import('./pages/Dashboard/user/Store'))
 const CartClient = lazy(() => import('./pages/Dashboard/user/Cart'))
 const Meetings = lazy(() => import('./pages/Dashboard/user/Meetings'))
 const ClientMeetingBooking = lazy(() => import('./pages/Dashboard/user/ClientMeetingBooking'))
 const Plans = lazy(() => import('./pages/Dashboard/user/Plans'))
 const Team = lazy(() => import('./pages/Dashboard/user/Team'))
+const TeamJoin = lazy(() => import('./pages/Dashboard/user/TeamJoin'))
 const Invoices = lazy(() => import('./pages/Dashboard/user/Invoices'))
 const PauseSubscription = lazy(() => import('./pages/Dashboard/user/PauseSubscription'))
 
@@ -109,18 +111,17 @@ const CMSEditor = lazy(() => import('./pages/Dashboard/admin/CMSEditor'))
 const AddUser = lazy(() => import('./components/dashboard/admin/AddUser.tsx'))
 const AddProject = lazy(() => import('./components/dashboard/admin/AddProject.tsx'))
 const AdminMeetings = lazy(() => import('./pages/Dashboard/admin/AdminMeetings.tsx'))
-const AdminMeetingBooking = lazy(() => import('./pages/Dashboard/admin/AdminMeetingBooking.tsx'))
 const AdminAssignMeetingDesigner = lazy(() => import('./pages/Dashboard/admin/AdminAssignMeetingDesigner'))
 const AdminPortfolio = lazy(() => import('./pages/Dashboard/admin/AdminPortfolio'))
 const AdminPortfolioFormPage = lazy(() => import('./pages/Dashboard/admin/AdminPortfolioFormPage'))
 const AdminPayments = lazy(() => import('./pages/Dashboard/admin/AdminPayments.tsx'))
+const AdminSubAdmins = lazy(() => import('./pages/Dashboard/admin/AdminSubAdmins.tsx'))
 const routes = createBrowserRouter(
   createRoutesFromElements(
     <>
       <Route path='/' element={<Home />} />
       <Route path='/' element={<MainLayout />}>
         <Route path='/cart' element={<Cart />} />
-        <Route path='*' element={<NotFound />} />
         <Route path='store' element={<Store />} />
         <Route path='store/:id' element={<ProductPage />} />
         <Route
@@ -129,10 +130,12 @@ const routes = createBrowserRouter(
         />
         <Route path='terms' element={<Terms />} />
         <Route path='work/:projectId?' element={<Work />} />
+        <Route path='*' element={<NotFound />} />
       </Route>
 
       {/* <Route path='dashboard' element={<Dashboard />} />  */}
       <Route path='login' element={<Login />} />
+      <Route path='/team/join' element={<TeamJoin />} />
       {/* Admin Login */}
       <Route path="/admin/login" element={<AdminLogin />} />
 
@@ -154,14 +157,24 @@ const routes = createBrowserRouter(
         <Route path="subscription" element={<ClientSubscriptionSettingsPage />} />
         <Route path="security" element={<ClientSecuritySettingsPage />} />
       </Route>
-      <Route path="/client/invite" element={<ProtectedRoute requiredRole="client"><Invite /></ProtectedRoute>} />
+      <Route path="/client/invite" element={<Navigate to="/client/team" replace />} />
       <Route path="/client/store" element={<ProtectedRoute requiredRole="client"><StoreClient /></ProtectedRoute>} />
       <Route path="/client/cart" element={<ProtectedRoute requiredRole="client"><CartClient /></ProtectedRoute>} />
       {/* <Route path="/client/file-manager" element={<ProtectedRoute requiredRole="client"><FileManager /></ProtectedRoute>} /> */}
-      <Route path="/client/meetings" element={<ProtectedRoute requiredRole="client"><Meetings /></ProtectedRoute>} />
-      <Route path="/client/meetings/new" element={<ProtectedRoute requiredRole="client"><ClientMeetingBooking /></ProtectedRoute>} />
+      <Route
+        path="/client/meetings"
+        element={
+          <ProtectedRoute requiredRole="client">
+            <Outlet />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Meetings />} />
+        <Route path="new" element={<ClientMeetingBooking />} />
+      </Route>
       <Route path="/client/plans" element={<ProtectedRoute requiredRole="client"><Plans /></ProtectedRoute>} />
       <Route path="/client/services" element={<ProtectedRoute requiredRole="client"><Services /></ProtectedRoute>} />
+      <Route path="/client/services/:slugOrId" element={<ProtectedRoute requiredRole="client"><ClientServiceDetail /></ProtectedRoute>} />
       <Route path="/client/team" element={<ProtectedRoute requiredRole="client"><Team /></ProtectedRoute>} />
       <Route path="/client/invoices" element={<ProtectedRoute requiredRole="client"><Invoices /></ProtectedRoute>} />
       <Route path="/client/subscription/pause" element={<ProtectedRoute requiredRole="client"><PauseSubscription /></ProtectedRoute>} />
@@ -189,6 +202,7 @@ const routes = createBrowserRouter(
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/notifications" element={<ProtectedRoute requiredRole="admin"><NotificationHistory /></ProtectedRoute>} />
+      <Route path="/admin/sub-admins" element={<ProtectedRoute requiredRole="admin"><AdminSubAdmins /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><AdminUsers /></ProtectedRoute>} />
       <Route path="/admin/users/add" element={<ProtectedRoute requiredRole="admin"><AddUser /></ProtectedRoute>} />
       <Route path="/admin/projects" element={<ProtectedRoute requiredRole="admin"><AdminProjects /></ProtectedRoute>} />
@@ -199,7 +213,8 @@ const routes = createBrowserRouter(
       <Route path="/admin/projects/:briefId" element={<ProtectedRoute requiredRole="admin"><AdminProjectDetail /></ProtectedRoute>} />
       <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="admin"><AdminSubscriptions /></ProtectedRoute>} />
       <Route path="/admin/meetings" element={<ProtectedRoute requiredRole="admin"><AdminMeetings /></ProtectedRoute>} />
-      <Route path="/admin/meetings/new" element={<ProtectedRoute requiredRole="admin"><AdminMeetingBooking /></ProtectedRoute>} />
+      <Route path="/admin/meetings/availability" element={<Navigate to="/admin/meetings" replace />} />
+      <Route path="/admin/meetings/new" element={<Navigate to="/admin/meetings" replace />} />
       <Route path="/admin/meetings/:meetingId/assign-designer" element={<ProtectedRoute requiredRole="admin"><AdminAssignMeetingDesigner /></ProtectedRoute>} />
       <Route path="/admin/portfolio" element={<ProtectedRoute requiredRole="admin"><AdminPortfolio /></ProtectedRoute>} />
       <Route path="/admin/portfolio/new" element={<ProtectedRoute requiredRole="admin"><AdminPortfolioFormPage /></ProtectedRoute>} />

@@ -16,6 +16,8 @@ import {
   assignDesignerToMeeting,
   fetchAdminMeetings,
   fetchDesignersDropdown,
+  formatMeetingTypeLabel,
+  getMeetingDisplayTitle,
   type MeetingListItem,
   type UserDropdownItem,
 } from '../../../lib/meetings-api';
@@ -50,8 +52,8 @@ const AdminAssignMeetingDesigner = () => {
       setLoadError(null);
 
       const [meetings, designersList] = await Promise.all([
-        fetchAdminMeetings(apiUrl, token),
-        fetchDesignersDropdown(apiUrl, token),
+        fetchAdminMeetings(token),
+        fetchDesignersDropdown(token),
       ]);
 
       const currentMeeting = meetings.find((item) => item._id === meetingId) || null;
@@ -72,7 +74,7 @@ const AdminAssignMeetingDesigner = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [apiUrl, meetingId, token]);
+  }, [meetingId, token]);
 
   useEffect(() => {
     loadPage();
@@ -100,7 +102,7 @@ const AdminAssignMeetingDesigner = () => {
 
     try {
       setIsSubmitting(true);
-      await assignDesignerToMeeting(apiUrl, token, meetingId, selectedDesignerId);
+      await assignDesignerToMeeting(token, meetingId, selectedDesignerId);
       toast.success('Designer assigned successfully');
       navigate('/admin/meetings');
     } catch (error: unknown) {
@@ -182,10 +184,12 @@ const AdminAssignMeetingDesigner = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Badge className="uppercase text-[9px] tracking-widest font-black mb-2">
-                {meeting.meeting_type?.replace('_', ' ')}
-              </Badge>
-              <p className="font-bold text-sm">{meeting.agenda}</p>
+              {formatMeetingTypeLabel(meeting.meeting_type) && (
+                <Badge className="uppercase text-[9px] tracking-widest font-black mb-2">
+                  {formatMeetingTypeLabel(meeting.meeting_type)}
+                </Badge>
+              )}
+              <p className="font-bold text-sm">{getMeetingDisplayTitle(meeting)}</p>
             </div>
             <div className="flex items-center gap-4 text-[11px] uppercase tracking-tighter font-bold text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">

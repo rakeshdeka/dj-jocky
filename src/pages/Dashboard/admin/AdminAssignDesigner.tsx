@@ -41,7 +41,7 @@ const AdminAssignDesigner = () => {
 
       const [briefData, designersList] = await Promise.all([
         fetchBrief(token, briefId),
-        fetchDesignersDropdown(apiUrl, token),
+        fetchDesignersDropdown(token),
       ]);
 
       setBrief(briefData);

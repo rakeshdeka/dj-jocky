@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { format } from "date-fns";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { addDays, format } from "date-fns";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
-import { ArrowLeft, CalendarIcon, Globe, Layers, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Clock, Loader2, Sparkles } from "lucide-react";
 
 import MainLayout from "../../../components/dashboard/layout/MainLayout";
+import CalcomEmbed from "../../../components/dashboard/meetings/CalcomEmbed";
 import { Button } from "../../../components/dashboard/ui/button";
 import {
   Card,
@@ -17,68 +18,126 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../components/dashboard/ui/card";
-import { Input } from "../../../components/dashboard/ui/input";
 import { Label } from "../../../components/dashboard/ui/label";
-import { Textarea } from "../../../components/dashboard/ui/textarea";
 import { Calendar } from "../../../components/dashboard/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/dashboard/ui/popover";
 import { RootState } from "../../../store/store";
 import { cn } from "../../../lib/utils";
-import { createMeeting, isValidGoogleMeetUrl } from "../../../lib/meetings-api";
+import {
+  fetchAvailableSlots,
+  fetchCalcomConfig,
+  getCalcomEventType,
+  isCalcomProvider,
+  requestMeeting,
+  type AvailabilitySlot,
+  type CalcomConfig,
+} from "../../../lib/meetings-api";
 
-const EMPTY_FORM = {
-  agenda: "",
-  date: new Date(),
-  time: "",
-  meeting_type: "service",
-  meeting_link: "",
-};
+const emptyLegacyConfig = (): CalcomConfig => ({
+  provider: "legacy",
+  isCalcom: false,
+  event_type: null,
+  event_types: [],
+});
 
 export default function ClientMeetingBooking() {
   const navigate = useNavigate();
-  const apiUrl = import.meta.env.VITE_API_URL || "";
   const { token } = useSelector((state: RootState) => state.auth);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [calcomConfig, setCalcomConfig] = useState<CalcomConfig | null>(null);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const [date, setDate] = useState<Date>(new Date());
+  const [legacySlots, setLegacySlots] = useState<AvailabilitySlot[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState("");
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const useCalcom = isCalcomProvider(calcomConfig);
+  const eventType = calcomConfig ? getCalcomEventType(calcomConfig) : null;
+
+  const loadConfig = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      setIsLoadingConfig(true);
+      const config = await fetchCalcomConfig(token);
+      setCalcomConfig(config);
+    } catch {
+      setCalcomConfig(emptyLegacyConfig());
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  }, [token]);
+
+  const loadLegacySlots = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      setIsLoadingSlots(true);
+      setSelectedSlotId("");
+
+      const items = await fetchAvailableSlots(token, {
+        date: format(date, "yyyy-MM-dd"),
+      });
+      setLegacySlots(items);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not load available slots");
+      setLegacySlots([]);
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  }, [token, date]);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
+
+  useEffect(() => {
+    if (!isLoadingConfig && !useCalcom) loadLegacySlots();
+  }, [loadLegacySlots, isLoadingConfig, useCalcom]);
+
+  const handleLegacySubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!form.agenda.trim() || !form.time || !form.meeting_link.trim()) {
-      toast.error("Please fill all required fields");
-      return;
-    }
-
-    if (!isValidGoogleMeetUrl(form.meeting_link)) {
-      toast.error("Meeting link must be a valid Google Meet URL (https://meet.google.com/...)");
-      return;
-    }
-
     if (!token) {
-      toast.error("You must be signed in to schedule a meeting");
+      toast.error("You must be signed in to book a call");
+      return;
+    }
+
+    if (!selectedSlotId) {
+      toast.error("Please select a time slot");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await createMeeting(apiUrl, token, {
-        date: format(form.date, "yyyy-MM-dd"),
-        time: form.time,
-        meeting_type: form.meeting_type,
-        agenda: form.agenda.trim(),
-        meeting_link: form.meeting_link.trim(),
+
+      const result = await requestMeeting(token, {
+        slot_id: selectedSlotId,
       });
-      toast.success("Meeting scheduled successfully");
+      toast.success(result.message || "Call request submitted. We'll confirm your call shortly.");
+
       navigate("/client/meetings");
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Booking failed";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Booking failed");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoadingConfig) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center py-32 gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C4FE01]" />
+          <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold">
+            Loading booking...
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -97,86 +156,45 @@ export default function ClientMeetingBooking() {
 
         <h1 className="text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[#C4FE01]" />
-          Schedule Meeting
+          {useCalcom ? "Book a Call" : "Request a Call"}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Book a consultation and share your Google Meet link.
+          {useCalcom
+            ? "Pick a time on the calendar. Your booking syncs to your meetings list automatically."
+            : "Pick an available slot. An admin will confirm your call and send a Google Meet link."}
         </p>
       </div>
 
-      <Card className="max-w-2xl bg-card border-border/40">
-        <CardHeader>
-          <CardTitle className="text-lg font-black uppercase tracking-tight">New Session</CardTitle>
-          <CardDescription>Select context and schedule your consultation.</CardDescription>
-        </CardHeader>
-
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Meeting Type
-              </Label>
-              <div className="grid grid-cols-2 gap-2 p-1 bg-secondary/20 rounded-2xl">
-                <Button
-                  type="button"
-                  className={cn(
-                    "h-12 text-[10px] font-black uppercase rounded-xl transition-all duration-200",
-                    form.meeting_type === "service"
-                      ? "bg-[#C4FE01] text-black shadow-lg"
-                      : "bg-transparent text-muted-foreground hover:text-white",
-                  )}
-                  onClick={() => setForm({ ...form, meeting_type: "service" })}
-                >
-                  <Layers className="mr-2 h-4 w-4" /> Service
-                </Button>
-                <Button
-                  type="button"
-                  className={cn(
-                    "h-12 text-[10px] font-black uppercase rounded-xl transition-all duration-200",
-                    form.meeting_type === "platform_query"
-                      ? "bg-[#C4FE01] text-black shadow-lg"
-                      : "bg-transparent text-muted-foreground hover:text-white",
-                  )}
-                  onClick={() => setForm({ ...form, meeting_type: "platform_query" })}
-                >
-                  <Globe className="mr-2 h-4 w-4" /> Platform Query
-                </Button>
+      {useCalcom ? (
+        <Card className="bg-card/40 border-border/40 overflow-hidden">
+          <CardContent className="p-4 sm:p-6">
+            {eventType?.cal_link ? (
+              <CalcomEmbed
+                calLink={eventType.cal_link}
+                username={calcomConfig?.username}
+                title={eventType.title || eventType.slug?.replace(/-/g, " ") || "Book a meeting"}
+              />
+            ) : (
+              <div className="py-16 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No calendar link is configured yet.
+                </p>
+                <p className="text-xs text-muted-foreground">Please contact support if this persists.</p>
               </div>
-            </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="max-w-2xl bg-card border-border/40">
+          <CardHeader>
+            <CardTitle className="text-lg font-black uppercase tracking-tight">Call Request</CardTitle>
+            <CardDescription>
+              This is a request, not instant booking. You&apos;ll be notified once confirmed.
+            </CardDescription>
+          </CardHeader>
 
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Agenda
-              </Label>
-              <Textarea
-                value={form.agenda}
-                onChange={(e) => setForm({ ...form, agenda: e.target.value })}
-                className="bg-secondary/30 border-none min-h-[100px] text-sm rounded-xl resize-none focus-visible:ring-1 focus-visible:ring-[#C4FE01]"
-                placeholder="What would you like to discuss?"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Google Meet Link
-              </Label>
-              <Input
-                type="url"
-                value={form.meeting_link}
-                onChange={(e) => setForm({ ...form, meeting_link: e.target.value })}
-                className="bg-secondary/30 border-none h-12 text-sm rounded-xl focus-visible:ring-[#C4FE01]"
-                placeholder="https://meet.google.com/abc-defg-hij"
-                required
-                disabled={isSubmitting}
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Paste the Google Meet URL for this session.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form onSubmit={handleLegacySubmit}>
+            <CardContent className="space-y-5">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                   Date
@@ -190,15 +208,17 @@ export default function ClientMeetingBooking() {
                       disabled={isSubmitting}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4 text-[#C4FE01]" />
-                      {format(form.date, "MMM dd, yyyy")}
+                      {format(date, "MMM dd, yyyy")}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0 border-none">
                     <Calendar
                       mode="single"
-                      selected={form.date}
-                      onSelect={(d) => d && setForm({ ...form, date: d })}
-                      disabled={(date) => date < new Date()}
+                      selected={date}
+                      onSelect={(d) => d && setDate(d)}
+                      disabled={(d) =>
+                        d < new Date(new Date().setHours(0, 0, 0, 0)) || d > addDays(new Date(), 60)
+                      }
                     />
                   </PopoverContent>
                 </Popover>
@@ -206,41 +226,67 @@ export default function ClientMeetingBooking() {
 
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Time
+                  Available Slots
                 </Label>
-                <Input
-                  type="time"
-                  className="bg-secondary/30 border-none h-12 text-sm rounded-xl focus-visible:ring-[#C4FE01]"
-                  value={form.time}
-                  onChange={(e) => setForm({ ...form, time: e.target.value })}
-                  required
-                  disabled={isSubmitting}
-                />
+                {isLoadingSlots ? (
+                  <div className="flex items-center justify-center py-8 border border-dashed border-border/40 rounded-xl">
+                    <Loader2 className="h-5 w-5 animate-spin text-[#C4FE01]" />
+                  </div>
+                ) : legacySlots.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {legacySlots.map((slot) => {
+                      const isSelected = selectedSlotId === slot._id;
+                      return (
+                        <button
+                          key={slot._id}
+                          type="button"
+                          onClick={() => setSelectedSlotId(slot._id)}
+                          className={cn(
+                            "p-3 rounded-xl border text-left transition-all",
+                            isSelected
+                              ? "border-[#C4FE01] bg-[#C4FE01]/10"
+                              : "border-border/40 bg-secondary/20 hover:border-[#C4FE01]/40",
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 text-xs font-bold">
+                            <Clock className="h-3 w-3 text-[#C4FE01]" />
+                            {slot.start_time} – {slot.end_time}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-6 text-center border border-dashed border-border/40 rounded-xl">
+                    No slots available for this date. Try another day.
+                  </p>
+                )}
               </div>
-            </div>
-          </CardContent>
 
-          <CardFooter className="flex flex-col sm:flex-row gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={isSubmitting}
-              onClick={() => navigate("/client/meetings")}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full sm:flex-1 bg-[#C4FE01] text-black hover:bg-[#C4FE01]/90 font-black h-12 rounded-md uppercase text-xs tracking-[0.2em]"
-            >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {isSubmitting ? "Scheduling..." : "Book Session"}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+            </CardContent>
+
+            <CardFooter className="flex flex-col sm:flex-row gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={isSubmitting}
+                onClick={() => navigate("/client/meetings")}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting || !selectedSlotId}
+                className="w-full sm:flex-1 bg-[#C4FE01] text-black hover:bg-[#C4FE01]/90 font-black h-12 rounded-md uppercase text-xs tracking-[0.2em]"
+              >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                {isSubmitting ? "Submitting..." : "Submit Call Request"}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      )}
     </MainLayout>
   );
 }

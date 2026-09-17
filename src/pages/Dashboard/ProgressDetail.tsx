@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -11,11 +11,18 @@ import {
   startDesignerWork,
 } from '../../lib/designer-api';
 import { fetchBrief, getDesignerFeedbackNotes, type Brief, type BriefStatus } from '../../lib/briefs-api';
-import { fetchBriefDeliveryFiles, type BriefFile } from '../../lib/files-api';
+import {
+  fetchBriefFilesBundle,
+  type BriefDeliverables,
+  type BriefFile,
+} from '../../lib/files-api';
 import ProgressDeliveryPanel, {
   type ProgressMessage,
 } from '../../components/dashboard/progress/ProgressDeliveryPanel';
 import SubmitWorkSheet from '../../components/dashboard/designer/SubmitWorkSheet';
+import SubmitFinalDeliverySheet from '../../components/dashboard/designer/SubmitFinalDeliverySheet';
+
+const POLL_INTERVAL_MS = 45_000;
 
 const ProgressDetail = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -30,78 +37,118 @@ const ProgressDetail = () => {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [statusProgress, setStatusProgress] = useState<StatusProgress | null>(null);
   const [deliveryFiles, setDeliveryFiles] = useState<BriefFile[]>([]);
+  const [deliverables, setDeliverables] = useState<BriefDeliverables | null>(null);
   const [messages, setMessages] = useState<ProgressMessage[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [submitWorkOpen, setSubmitWorkOpen] = useState(false);
+  const [submitFinalOpen, setSubmitFinalOpen] = useState(false);
 
-  const fetchMessages = async (id: string) => {
-    const res = await axios.get(`${apiUrl}/chat/brief-groups/${id}/messages`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = res.data;
-    const rawItems = data.items || data.messages || [];
-    const items: ProgressMessage[] = rawItems.map((item: Record<string, unknown>) => {
-      const sender = item.sender_id as Record<string, string> | string | undefined;
-      const senderObj = typeof sender === 'object' && sender ? sender : null;
+  const isSendingRef = useRef(false);
 
-      return {
-        _id: String(item._id || item.id),
-        message: String(item.message || ''),
-        createdAt: String(item.createdAt || new Date().toISOString()),
-        attachments: item.attachments as ProgressMessage['attachments'],
-        file: item.file as ProgressMessage['file'],
-        files: item.files as ProgressMessage['files'],
-        sender_id: {
-          _id: String(senderObj?._id || sender || ''),
-          name: String(senderObj?.name || 'Unknown'),
-          role: senderObj?.role,
-        },
-      };
-    });
+  const fetchMessages = useCallback(
+    async (id: string) => {
+      const res = await axios.get(`${apiUrl}/chat/brief-groups/${id}/messages`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = res.data;
+      const rawItems = data.items || data.messages || [];
+      const items: ProgressMessage[] = rawItems.map((item: Record<string, unknown>) => {
+        const sender = item.sender_id as Record<string, string> | string | undefined;
+        const senderObj = typeof sender === 'object' && sender ? sender : null;
 
-    setMessages(items);
-    setStatusProgress(data.status_progress || null);
-    return data;
-  };
+        return {
+          _id: String(item._id || item.id),
+          message: String(item.message || ''),
+          createdAt: String(item.createdAt || new Date().toISOString()),
+          attachments: item.attachments as ProgressMessage['attachments'],
+          file: item.file as ProgressMessage['file'],
+          files: item.files as ProgressMessage['files'],
+          sender_id: {
+            _id: String(senderObj?._id || sender || ''),
+            name: String(senderObj?.name || 'Unknown'),
+            role: senderObj?.role,
+          },
+        };
+      });
 
-  const loadDetail = useCallback(async () => {
-    if (!token || !briefId) return;
+      setMessages(items);
+      setStatusProgress(data.status_progress || null);
 
-    try {
-      setIsLoading(true);
-
-      let briefData: Brief;
-      if (isDesigner) {
-        const designerBrief = await fetchDesignerBrief(token, briefId);
-        briefData = designerBrief as unknown as Brief;
-        if (designerBrief.status_progress) {
-          setStatusProgress(designerBrief.status_progress as StatusProgress);
-        }
-      } else {
-        briefData = await fetchBrief(token, briefId);
+      const chatBrief = data.brief as { revision_count?: number; revision_limit?: number | null } | undefined;
+      if (chatBrief) {
+        setBrief((prev) =>
+          prev
+            ? {
+                ...prev,
+                revision_count: chatBrief.revision_count ?? prev.revision_count,
+                revision_limit: chatBrief.revision_limit ?? prev.revision_limit,
+              }
+            : prev,
+        );
       }
 
-      setBrief(briefData);
+      return data;
+    },
+    [apiUrl, token],
+  );
 
-      const [files] = await Promise.all([
-        fetchBriefDeliveryFiles(token, briefId),
-        fetchMessages(briefId),
-      ]);
-      setDeliveryFiles(files);
-    } catch {
-      toast.error('Could not load project');
-      navigate(basePath);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token, briefId, isDesigner, apiUrl, navigate, basePath]);
+  const loadDetail = useCallback(
+    async (options: { showLoader?: boolean } = {}) => {
+      if (!token || !briefId) return;
+
+      const { showLoader = true } = options;
+
+      try {
+        if (showLoader) setIsLoading(true);
+
+        let briefData: Brief;
+        if (isDesigner) {
+          const designerBrief = await fetchDesignerBrief(token, briefId);
+          briefData = designerBrief as unknown as Brief;
+          if (designerBrief.status_progress) {
+            setStatusProgress(designerBrief.status_progress as StatusProgress);
+          }
+        } else {
+          briefData = await fetchBrief(token, briefId);
+        }
+
+        setBrief(briefData);
+
+        const [files] = await Promise.all([
+          fetchBriefFilesBundle(token, briefId),
+          fetchMessages(briefId),
+        ]);
+        setDeliveryFiles(files.delivery_files);
+        setDeliverables(files.deliverables);
+      } catch {
+        if (showLoader) {
+          toast.error('Could not load project');
+          navigate(basePath);
+        }
+      } finally {
+        if (showLoader) setIsLoading(false);
+      }
+    },
+    [token, briefId, isDesigner, navigate, basePath, fetchMessages],
+  );
 
   useEffect(() => {
     loadDetail();
   }, [loadDetail]);
+
+  useEffect(() => {
+    if (!briefId || !token) return;
+
+    const intervalId = window.setInterval(() => {
+      if (isSendingRef.current) return;
+      loadDetail({ showLoader: false });
+    }, POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [briefId, token, loadDetail]);
 
   const handleSendMessage = async (content: string, files?: File[]) => {
     if (!token || !briefId) return;
@@ -118,6 +165,7 @@ const ProgressDetail = () => {
     }
 
     try {
+      isSendingRef.current = true;
       setIsSendingMessage(true);
       const formData = new FormData();
       if (content.trim()) formData.append('message', content.trim());
@@ -140,7 +188,7 @@ const ProgressDetail = () => {
       );
 
       if (res.data.success) {
-        await fetchMessages(briefId);
+        await loadDetail({ showLoader: false });
       }
     } catch (error: unknown) {
       const message =
@@ -149,6 +197,7 @@ const ProgressDetail = () => {
           : undefined;
       toast.error(message || 'Failed to send message');
     } finally {
+      isSendingRef.current = false;
       setIsSendingMessage(false);
     }
   };
@@ -160,7 +209,7 @@ const ProgressDetail = () => {
       await startDesignerWork(token, briefId);
       toast.success('Work started');
       setBrief((prev) => (prev ? { ...prev, status: 'in_progress' } : prev));
-      await loadDetail();
+      await loadDetail({ showLoader: false });
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Failed to start work');
     } finally {
@@ -185,19 +234,23 @@ const ProgressDetail = () => {
             isClient={isClient}
             isDesigner={isDesigner}
             deliveryFiles={deliveryFiles}
+            deliverables={deliverables}
             messages={messages}
             statusProgress={statusProgress}
             isLoading={isLoading}
             isSendingMessage={isSendingMessage}
             isUpdatingStatus={isUpdatingStatus}
             onBack={() => navigate(basePath)}
-            onRefresh={loadDetail}
+            onRefresh={() => loadDetail({ showLoader: false })}
             onSendMessage={handleSendMessage}
             onStartWork={handleStartWork}
             onSubmitWork={() => setSubmitWorkOpen(true)}
+            onUploadFinal={() => setSubmitFinalOpen(true)}
             onStatusChange={handleStatusChange}
             designerFeedbackNotes={isDesigner ? getDesignerFeedbackNotes(brief) : null}
             briefUpdatedAt={brief?.updatedAt}
+            revisionCount={brief?.revision_count}
+            revisionLimit={brief?.revision_limit}
           />
         )}
       </div>
@@ -209,7 +262,19 @@ const ProgressDetail = () => {
         token={token}
         onClose={() => setSubmitWorkOpen(false)}
         onSuccess={async () => {
-          await loadDetail();
+          await loadDetail({ showLoader: false });
+        }}
+      />
+
+      <SubmitFinalDeliverySheet
+        open={submitFinalOpen}
+        briefId={briefId ?? null}
+        briefTitle={brief?.title}
+        token={token}
+        onClose={() => setSubmitFinalOpen(false)}
+        onSuccess={async () => {
+          setBrief((prev) => (prev ? { ...prev, status: 'completed' } : prev));
+          await loadDetail({ showLoader: false });
         }}
       />
     </MainLayout>

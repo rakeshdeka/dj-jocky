@@ -182,9 +182,18 @@ export default function ProductPage() {
 										))}
 									</div>
 								)}
-								{service.can_purchase !== false && (
+								{service.is_included_in_subscription && (
+									<p className='text-[#C4FE01] text-sm font-SFPro'>Included in your plan</p>
+								)}
+								{service.is_purchased_individually && (
+									<p className='text-sm font-SFPro text-grey-light'>Purchased individually</p>
+								)}
+								{service.has_access && !service.is_included_in_subscription && !service.is_purchased_individually && (
+									<p className='text-sm font-SFPro text-grey-light'>You have access</p>
+								)}
+								{service.can_purchase && (
 									<Button
-										text='Buy now'
+										text='Buy individually'
 										className='bg-color-secondary btn_base w-full'
 										onClick={handleBuyNow}
 									/>

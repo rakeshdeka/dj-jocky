@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { BriefFile } from './files-api';
+import type { BriefFile, BriefDeliverables } from './files-api';
 
 const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -11,6 +11,7 @@ export type BriefStatus =
   | 'in_progress'
   | 'pending_admin_review'
   | 'under_review'
+  | 'awaiting_final_delivery'
   | 'revision'
   | 'completed';
 
@@ -29,13 +30,49 @@ export type Brief = {
   designer_id?: { _id?: string; name?: string; email?: string } | null;
   reference_files?: BriefFile[];
   delivery_files?: BriefFile[];
+  deliverables?: BriefDeliverables;
   revision_note?: string;
   rejection_note?: string;
   latest_revision_note?: string;
   latest_rejection_note?: string;
   admin_rejection_note?: string;
+  revision_count?: number;
+  revision_limit?: number | null;
+  team_id?: string;
+  created_by_user_id?: string | { _id?: string; name?: string; email?: string };
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type RevisionLimit = number | null | undefined;
+
+/** `null` / omitted means unlimited revisions. */
+export const hasRevisionLimit = (revisionLimit?: RevisionLimit): boolean =>
+  typeof revisionLimit === 'number' && revisionLimit > 0;
+
+export const getRemainingRevisions = (
+  revisionCount = 0,
+  revisionLimit?: RevisionLimit,
+): number | null => {
+  if (!hasRevisionLimit(revisionLimit)) return null;
+  return Math.max(0, revisionLimit - revisionCount);
+};
+
+export const canRequestRevision = (
+  revisionCount = 0,
+  revisionLimit?: RevisionLimit,
+): boolean => {
+  if (!hasRevisionLimit(revisionLimit)) return true;
+  return revisionCount < revisionLimit;
+};
+
+export const formatRevisionsRemainingLabel = (
+  revisionCount = 0,
+  revisionLimit?: RevisionLimit,
+): string | null => {
+  const remaining = getRemainingRevisions(revisionCount, revisionLimit);
+  if (remaining === null) return null;
+  return remaining === 1 ? '1 revision left' : `${remaining} revisions left`;
 };
 
 export type BriefFormValues = {
@@ -89,19 +126,34 @@ export const normalizeBrief = (item: any, envelope?: Record<string, unknown>): B
   service_id: item.service_id,
   reference_files: item.reference_files ?? envelope?.reference_files,
   delivery_files: item.delivery_files ?? envelope?.delivery_files,
+  deliverables: item.deliverables ?? envelope?.deliverables,
 });
 
 export const formatBriefStatus = (status?: string, role: BriefStatusRole = 'client') => {
   const value = status || 'not_assigned';
-  if (role === 'client' && value === 'pending_admin_review') return 'in progress';
+  if (role === 'client' && (value === 'not_assigned' || value === 'pending_admin_review')) {
+    return value === 'not_assigned' ? 'assigned' : 'in progress';
+  }
+  if (role === 'client' && value === 'awaiting_final_delivery') return 'in progress';
   if (value === 'pending_admin_review') return 'pending admin review';
+  if (value === 'awaiting_final_delivery') return 'awaiting final delivery';
   return value.replace(/_/g, ' ');
 };
 
 export const getClientKanbanStatus = (status?: BriefStatus): BriefStatus => {
+  if (!status || status === 'not_assigned') return 'assigned';
   if (status === 'pending_admin_review') return 'in_progress';
-  return status || 'not_assigned';
+  if (status === 'awaiting_final_delivery') return 'in_progress';
+  return status;
 };
+
+export const getClientStatusMessage = (status?: BriefStatus) => {
+  if (status === 'awaiting_final_delivery') return 'Preparing your files';
+  return null;
+};
+
+export const isAwaitingFinalDelivery = (status?: BriefStatus) =>
+  status === 'awaiting_final_delivery';
 
 export const canClientSeeDeliveryFiles = (status?: BriefStatus) =>
   status === 'under_review' || status === 'completed' || status === 'revision';

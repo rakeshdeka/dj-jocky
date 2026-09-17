@@ -3,18 +3,51 @@ import { toMessageText } from './admin-settings-shared';
 
 export const apiBaseUrl = import.meta.env.VITE_API_URL;
 
+export type PaymentUserRef = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+};
+
+export type PaymentServiceRef = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  title?: string;
+  slug?: string;
+  price?: number;
+};
+
+export type PaymentPlanRef = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  slug?: string;
+  tier?: string;
+  price?: number;
+  currency?: string;
+};
+
 export type PaymentRecord = {
   _id: string;
+  id?: string;
   amount?: number;
   currency?: string;
   status?: string;
   type?: 'subscription' | 'service' | 'cart' | string;
-  subscription_status?: string;
+  subscription_status?: string | null;
   razorpay_payment_id?: string;
   razorpay_order_id?: string;
   createdAt?: string;
-  plan?: { _id?: string; name?: string };
-  services?: Array<{ _id?: string; name?: string }>;
+  user?: PaymentUserRef;
+  user_id?: string;
+  service?: PaymentServiceRef | null;
+  service_id?: string | null;
+  plan?: PaymentPlanRef | null;
+  services?: Array<{ _id?: string; name?: string; title?: string }>;
+  is_admin_assigned?: boolean;
 };
 
 export type PaymentsQuery = {
@@ -88,20 +121,7 @@ export const fetchMyPayments = async (
   const data = res.data;
   if (data.success === false) throw new Error(getApiError(data, 'Failed to load payments'));
 
-  const items: PaymentRecord[] = data.items || data.payments || data.data || [];
-  const pagination = data.pagination || data.meta || {};
-  const total = Number(pagination.total ?? data.total ?? items.length);
-  const totalPages = Number(
-    pagination.pages ?? pagination.totalPages ?? data.totalPages ?? Math.max(1, Math.ceil(total / limit)),
-  );
-
-  return {
-    items,
-    page: Number(pagination.page ?? data.page ?? page),
-    limit: Number(pagination.limit ?? data.limit ?? limit),
-    total,
-    totalPages,
-  };
+  return parsePaymentsListResponse(data as Record<string, unknown>, page, limit);
 };
 
 export const createSubscriptionOrder = async (token: string, subscriptionPlanId: string) => {
@@ -144,8 +164,66 @@ export const verifyRazorpayPayment = async (token: string, payload: VerifyPaymen
   return data;
 };
 
+const parsePaymentsListResponse = (
+  data: Record<string, unknown>,
+  page: number,
+  limit: number,
+): PaginatedPayments => {
+  const items: PaymentRecord[] =
+    (data.items as PaymentRecord[]) ||
+    (data.payments as PaymentRecord[]) ||
+    (data.data as PaymentRecord[]) ||
+    [];
+  const pagination = (data.pagination || data.meta || {}) as Record<string, unknown>;
+  const total = Number(pagination.total ?? data.total ?? items.length);
+  const totalPages = Number(
+    pagination.pages ?? pagination.totalPages ?? data.totalPages ?? Math.max(1, Math.ceil(total / limit)),
+  );
+
+  return {
+    items,
+    page: Number(pagination.page ?? data.page ?? page),
+    limit: Number(pagination.limit ?? data.limit ?? limit),
+    total,
+    totalPages,
+  };
+};
+
+export const fetchAdminPayments = async (
+  token: string,
+  query: PaymentsQuery = {},
+): Promise<PaginatedPayments> => {
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 20;
+
+  const res = await axios.get(`${apiBaseUrl}/admin/payments`, {
+    ...getAuthConfig(token),
+    params: {
+      page,
+      limit,
+      type: query.type || undefined,
+      status: query.status || undefined,
+      subscription_status: query.subscription_status || undefined,
+    },
+  });
+
+  const data = res.data as Record<string, unknown>;
+  if (data.success === false) throw new Error(getApiError(data, 'Failed to load payments'));
+
+  return parsePaymentsListResponse(data, page, limit);
+};
+
+export const getPaymentProductLabel = (payment: PaymentRecord): string => {
+  if (payment.type === 'subscription' && payment.plan?.name) return payment.plan.name;
+  if (payment.type === 'service' && payment.service) {
+    return payment.service.title || payment.service.name || '—';
+  }
+  const fromServices = payment.services?.map((s) => s.title || s.name).filter(Boolean).join(', ');
+  return fromServices || '—';
+};
+
 export const formatPaymentAmount = (payment: PaymentRecord) => {
-  const currency = payment.currency || 'INR';
+  const currency = payment.currency || payment.plan?.currency || 'INR';
   const amount = Number(payment.amount) || 0;
   try {
     return new Intl.NumberFormat(undefined, {

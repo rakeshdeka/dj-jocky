@@ -15,8 +15,11 @@ import { Label } from '../../../components/dashboard/ui/label'
 import { Checkbox } from '../../../components/dashboard/ui/checkbox'
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
+import type { AppDispatch } from '../../../store/store'
 import { setCredentials } from '../../../redux/authSlice'
+import { loadAdminAccess, setAdminAccessFromLogin } from '../../../redux/adminAccessSlice'
 import { RootState } from '../../../store/store'
+import { getDefaultAdminLandingPath } from '../../../lib/admin-access-api'
 
 type UserRole = 'client' | 'designer' | 'admin'
 
@@ -54,6 +57,7 @@ const getApiErrorMessage = (error: any, fallback: string) =>
 const normalizeRole = (role: string): UserRole => {
   const r = role?.toLowerCase()?.trim()
 
+  if (r?.includes('subadmin') || r?.includes('sub_admin') || r?.includes('sub-admin')) return 'admin'
   if (r?.includes('admin')) return 'admin'
   if (r?.includes('designer')) return 'designer'
   return 'client'
@@ -67,7 +71,7 @@ const AdminLogin = () => {
   )
 
   const navigate = useNavigate()
-  const dispatch = useDispatch()
+  const dispatch = useDispatch<AppDispatch>()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -120,7 +124,18 @@ const AdminLogin = () => {
         })
       )
 
-      navigate('/admin/dashboard', { replace: true })
+      if (data.access) {
+        dispatch(setAdminAccessFromLogin(data.access))
+      }
+
+      const accessResult = await dispatch(loadAdminAccess(data.token) as never)
+      const payload = (accessResult as { payload?: { menu?: unknown; is_super_admin?: boolean } })
+        ?.payload
+      const menu = (payload?.menu ?? null) as import('../../../lib/admin-access-api').AdminMenuAccess | null
+      const isSuper = Boolean(payload?.is_super_admin)
+      const landing = getDefaultAdminLandingPath(menu, isSuper)
+
+      navigate(landing, { replace: true })
 
     } catch (error: any) {
       setAuthError(getApiErrorMessage(error, 'Admin login failed'))
@@ -160,7 +175,7 @@ const AdminLogin = () => {
               Admin Login
             </CardTitle>
             <CardDescription className="text-white/50">
-              Please enter your admin credentials to access the dashboard.
+              Super admins and sub-admins sign in here. Your menu is based on assigned permissions.
             </CardDescription>
           </CardHeader>
 

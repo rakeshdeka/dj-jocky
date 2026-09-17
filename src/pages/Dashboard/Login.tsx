@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from '../../components/dashboard/ui/button';
 import { Input } from '../../components/dashboard/ui/input';
@@ -15,15 +15,13 @@ import { Label } from '../../components/dashboard/ui/label';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, User } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { setCredentials } from '../../redux/authSlice';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '../../components/dashboard/ui/select';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
+import {
+  consumePendingTeamInvite,
+  storePendingTeamInvite,
+} from './user/TeamJoin';
+import { previewTeamInvite } from '../../lib/team-api';
 
 type UserRole = 'client' | 'designer' | 'admin';
 
@@ -62,12 +60,14 @@ const Login = () => {
   const { token, user, isHydrated } = useSelector((state: RootState) => state.auth)
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const teamInviteParam = searchParams.get('teamInvite')?.trim() || '';
+  const wantsSignup = searchParams.get('signup') === '1';
 
   // common
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('client');
   const [showPassword, setShowPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
 
@@ -80,18 +80,50 @@ const Login = () => {
   const [isVerifyStep, setIsVerifyStep] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  /* ================= REGISTER ================= */
-  useEffect(() => {
-    if (!isHydrated || !token || !user?.role) return
+  const getPostAuthPath = (role: UserRole) => {
+    const pendingInvite = consumePendingTeamInvite() || teamInviteParam;
+    if (role === 'client' && pendingInvite) {
+      return `/team/join?token=${encodeURIComponent(pendingInvite)}`;
+    }
 
     const redirectMap: Record<UserRole, string> = {
       client: '/client/briefs',
       designer: '/designer/dashboard',
       admin: '/admin/dashboard',
-    }
+    };
 
-    navigate(redirectMap[user.role], { replace: true })
-  }, [isHydrated, token, user, navigate])
+    return redirectMap[role];
+  };
+
+  useEffect(() => {
+    if (teamInviteParam) {
+      storePendingTeamInvite(teamInviteParam);
+      if (wantsSignup) setIsSignUp(true);
+    }
+  }, [teamInviteParam, wantsSignup]);
+
+  useEffect(() => {
+    if (!teamInviteParam) return;
+
+    previewTeamInvite(teamInviteParam)
+      .then((preview) => {
+        if (preview.email) setEmail(preview.email);
+        if (preview.name) {
+          const [first, ...rest] = preview.name.trim().split(/\s+/);
+          setFirstName(first || '');
+          setLastName(rest.join(' '));
+        }
+      })
+      .catch(() => {
+        // Preview is optional on the login screen.
+      });
+  }, [teamInviteParam]);
+
+  /* ================= REGISTER ================= */
+  useEffect(() => {
+    if (!isHydrated || !token || !user?.role) return;
+    navigate(getPostAuthPath(user.role), { replace: true });
+  }, [isHydrated, token, user, navigate, teamInviteParam])
 
   const handleRegister = async () => {
     try {
@@ -100,7 +132,6 @@ const Login = () => {
 
       const formData = new FormData();
 
-      formData.append('role', selectedRole === 'client' ? 'Client' : 'Designer');
       formData.append('email', email);
       formData.append('password', password);
       formData.append('name', `${firstName} ${lastName}`);
@@ -211,13 +242,7 @@ const Login = () => {
         })
       )
 
-      const redirectMap: Record<UserRole, string> = {
-        client: '/client/briefs',
-        designer: '/designer/dashboard',
-        admin: '/admin/dashboard',
-      }
-
-      navigate(redirectMap[normalizedUser.role], { replace: true })
+      navigate(getPostAuthPath(normalizedUser.role), { replace: true })
     } catch (error: any) {
       setAuthError(getApiErrorMessage(error, 'Login failed'))
     } finally {
@@ -289,9 +314,11 @@ const Login = () => {
                 {isSignUp ? 'Create Account' : 'Welcome Back'}
               </CardTitle>
               <CardDescription className="text-white/60">
-                {isSignUp
-                  ? 'Sign up to start creating amazing designs'
-                  : 'Sign in to access your dashboard'}
+                {teamInviteParam
+                  ? 'Sign in with the invited email to join your team'
+                  : isSignUp
+                    ? 'Sign up to start creating amazing designs'
+                    : 'Sign in to access your dashboard'}
               </CardDescription>
             </CardHeader>
 
@@ -347,29 +374,6 @@ const Login = () => {
                       />
                     </div>
                   </>
-                )}
-
-                {/* ROLE */}
-                {isSignUp && !isVerifyStep && (
-                  <div className="space-y-2">
-                    <Label className="text-white">
-                      Account Type
-                    </Label>
-                    <Select
-                      value={selectedRole}
-                      onValueChange={(value) =>
-                        setSelectedRole(value as UserRole)
-                      }
-                    >
-                      <SelectTrigger className="bg-[#222] border-white/10 text-white">
-                        <SelectValue placeholder="Select your role" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#222] border-white/10">
-                        <SelectItem value="client">Client</SelectItem>
-                        <SelectItem value="designer">Designer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 )}
 
                 {/* EMAIL */}

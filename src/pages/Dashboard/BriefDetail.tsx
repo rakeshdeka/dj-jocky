@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import {
   ArrowLeft,
   Calendar,
-  ClipboardCheck,
   Edit2,
   Loader2,
   MessageSquare,
@@ -18,23 +17,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/dashb
 import { Button } from '../../components/dashboard/ui/button';
 import { Badge } from '../../components/dashboard/ui/badge';
 import BriefFilesPanel from '../../components/dashboard/briefs/BriefFilesPanel';
-import ClientDeliveryReviewSheet from '../../components/dashboard/briefs/ClientDeliveryReviewSheet';
+import ClientDeliveryReviewPanel from '../../components/dashboard/briefs/ClientDeliveryReviewPanel';
 import DesignerBriefActions from '../../components/dashboard/designer/DesignerBriefActions';
 import DesignerFeedbackNotes from '../../components/dashboard/designer/DesignerFeedbackNotes';
 import SubmitWorkSheet from '../../components/dashboard/designer/SubmitWorkSheet';
+import SubmitFinalDeliverySheet from '../../components/dashboard/designer/SubmitFinalDeliverySheet';
 import { RootState } from '../../store/store';
 import {
   canEditBrief,
   canReviewBrief,
-  canClientSeeDeliveryFiles,
   fetchBrief,
   formatBriefPriority,
   formatBriefStatus,
+  getClientStatusMessage,
   getDesignerFeedbackNotes,
+  isAwaitingFinalDelivery,
   type Brief,
   type BriefStatus,
 } from '../../lib/briefs-api';
-import { fetchBriefFilesBundle } from '../../lib/files-api';
+import {
+  countDeliverableFiles,
+  fetchBriefFilesBundle,
+  type BriefFilesBundle,
+} from '../../lib/files-api';
 import { fetchDesignerBrief, startDesignerWork } from '../../lib/designer-api';
 
 const statusVariant = (status?: string) => {
@@ -43,6 +48,7 @@ const statusVariant = (status?: string) => {
       return 'default';
     case 'in_progress':
     case 'under_review':
+    case 'awaiting_final_delivery':
       return 'secondary';
     case 'revision':
       return 'destructive';
@@ -84,6 +90,8 @@ const BriefDetail = () => {
 
   const isClient = user?.role === 'client';
   const isDesigner = user?.role === 'designer';
+  const isAdmin = user?.role === 'admin';
+  const viewerRole = isDesigner ? 'designer' : isAdmin ? 'admin' : 'client';
   const listPath = isDesigner ? '/designer/briefs' : '/client/briefs';
   const progressPath = isDesigner ? '/designer/progress' : '/client/progress';
   const messagesPath = isDesigner
@@ -91,11 +99,12 @@ const BriefDetail = () => {
     : `/client/progress/${briefId}`;
 
   const [brief, setBrief] = useState<Brief | null>(null);
+  const [filesBundle, setFilesBundle] = useState<BriefFilesBundle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
   const [submitWorkOpen, setSubmitWorkOpen] = useState(false);
+  const [submitFinalOpen, setSubmitFinalOpen] = useState(false);
 
   const loadBrief = useCallback(async () => {
     if (!token || !briefId) return;
@@ -112,19 +121,14 @@ const BriefDetail = () => {
         briefData = await fetchBrief(token, briefId);
       }
 
-      if (
-        (!briefData.reference_files?.length && !briefData.delivery_files?.length) ||
-        briefData.reference_files === undefined
-      ) {
-        const files = await fetchBriefFilesBundle(token, briefId);
-        briefData = {
-          ...briefData,
-          reference_files: files.reference_files,
-          delivery_files: files.delivery_files,
-        };
-      }
-
-      setBrief(briefData);
+      const files = await fetchBriefFilesBundle(token, briefId);
+      setFilesBundle(files);
+      setBrief({
+        ...briefData,
+        reference_files: files.reference_files,
+        delivery_files: files.delivery_files,
+        deliverables: files.deliverables,
+      });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to load brief details';
       setLoadError(message);
@@ -186,10 +190,17 @@ const BriefDetail = () => {
 
   const canReview = isClient && canReviewBrief(brief.status);
   const canEdit = isClient && canEditBrief(brief.status);
-  const statusRole = isDesigner ? 'designer' : isClient ? 'client' : 'admin';
-  const visibleDeliveryFiles =
-    isClient && !canClientSeeDeliveryFiles(brief.status) ? [] : brief.delivery_files || [];
+  const clientStatusMessage = isClient ? getClientStatusMessage(brief.status) : null;
+  const isPreparingFinal = isClient && isAwaitingFinalDelivery(brief.status);
+  const statusRole = viewerRole;
   const designerFeedbackNotes = isDesigner ? getDesignerFeedbackNotes(brief) : null;
+  const deliverables = filesBundle?.deliverables ?? brief.deliverables ?? null;
+  const previewFiles = deliverables?.preview.files ?? [];
+  const deliverableCount = deliverables ? countDeliverableFiles(deliverables) : brief.delivery_files?.length ?? 0;
+  const showFilesPanel =
+    !canReview &&
+    !isPreparingFinal &&
+    (isDesigner || isAdmin || (isClient && brief.status === 'completed'));
 
   return (
     <MainLayout>
@@ -239,23 +250,13 @@ const BriefDetail = () => {
               </Button>
             )}
 
-            {canReview && (
-              <Button
-                size="sm"
-                className="bg-[#C4FE01] hover:bg-[#b2e600] text-black font-bold"
-                onClick={() => setReviewOpen(true)}
-              >
-                <ClipboardCheck className="h-4 w-4 mr-2" />
-                Review Delivery
-              </Button>
-            )}
-
             {isDesigner && (
               <DesignerBriefActions
                 status={brief.status || 'not_assigned'}
                 isUpdating={isUpdatingStatus}
                 onStartWork={handleStartWork}
                 onSubmitWork={() => setSubmitWorkOpen(true)}
+                onUploadFinal={() => setSubmitFinalOpen(true)}
               />
             )}
           </div>
@@ -266,6 +267,29 @@ const BriefDetail = () => {
         <div className="xl:col-span-2 space-y-6">
           {designerFeedbackNotes && (
             <DesignerFeedbackNotes notes={designerFeedbackNotes} updatedAt={brief.updatedAt} />
+          )}
+
+          {clientStatusMessage && (
+            <div className="rounded-lg border border-[#C4FE01]/30 bg-[#C4FE01]/10 px-4 py-3">
+              <p className="text-sm font-semibold text-[#C4FE01]">{clientStatusMessage}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Your designer is packaging the final deliverables. You&apos;ll be notified when they&apos;re ready to download.
+              </p>
+            </div>
+          )}
+
+          {canReview && (
+            <ClientDeliveryReviewPanel
+              briefId={brief._id}
+              token={token}
+              previewFiles={previewFiles}
+              revisionCount={brief.revision_count}
+              revisionLimit={brief.revision_limit}
+              onSuccess={(newStatus) => {
+                handleStatusChange(newStatus);
+                loadBrief();
+              }}
+            />
           )}
 
           <Card className="bg-card/20 backdrop-blur-md border-border overflow-hidden">
@@ -332,24 +356,33 @@ const BriefDetail = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/20 backdrop-blur-md border-border">
-            <CardHeader>
-              <CardTitle className="text-sm font-bold tracking-[0.15em] uppercase">
-                Project Files
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <BriefFilesPanel
-                referenceFiles={brief.reference_files || []}
-                deliveryFiles={visibleDeliveryFiles}
-              />
-              {isClient && !canClientSeeDeliveryFiles(brief.status) && (
-                <p className="text-xs text-muted-foreground mt-3">
-                  Delivery files will appear here once your project is ready for review.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          {showFilesPanel && (
+            <Card className="bg-card/20 backdrop-blur-md border-border">
+              <CardHeader>
+                <CardTitle className="text-sm font-bold tracking-[0.15em] uppercase">
+                  Project Files
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <BriefFilesPanel
+                  referenceFiles={brief.reference_files || []}
+                  deliverables={deliverables}
+                  viewerRole={viewerRole}
+                  briefStatus={brief.status}
+                />
+                {isClient && brief.status === 'completed' && deliverableCount === 0 && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Final deliverables will appear here once uploaded.
+                  </p>
+                )}
+                {isClient && brief.status !== 'completed' && deliverableCount === 0 && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Delivery files will appear here once your project is ready for review.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -369,39 +402,37 @@ const BriefDetail = () => {
                 <span className="font-medium">{brief.reference_files?.length ?? 0}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Delivery files</span>
-                <span className="font-medium">{visibleDeliveryFiles.length}</span>
+                <span className="text-muted-foreground">Deliverables</span>
+                <span className="font-medium">{deliverableCount}</span>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {isClient && (
-        <ClientDeliveryReviewSheet
-          open={reviewOpen}
-          briefId={brief._id}
-          briefTitle={brief.title}
-          token={token}
-          onClose={() => setReviewOpen(false)}
-          onSuccess={(newStatus) => {
-            handleStatusChange(newStatus);
-            loadBrief();
-          }}
-        />
-      )}
-
       {isDesigner && (
-        <SubmitWorkSheet
-          open={submitWorkOpen}
-          briefId={brief._id}
-          briefTitle={brief.title}
-          token={token}
-          onClose={() => setSubmitWorkOpen(false)}
-          onSuccess={async () => {
-            await loadBrief();
-          }}
-        />
+        <>
+          <SubmitWorkSheet
+            open={submitWorkOpen}
+            briefId={brief._id}
+            briefTitle={brief.title}
+            token={token}
+            onClose={() => setSubmitWorkOpen(false)}
+            onSuccess={async () => {
+              await loadBrief();
+            }}
+          />
+          <SubmitFinalDeliverySheet
+            open={submitFinalOpen}
+            briefId={brief._id}
+            briefTitle={brief.title}
+            token={token}
+            onClose={() => setSubmitFinalOpen(false)}
+            onSuccess={async () => {
+              await loadBrief();
+            }}
+          />
+        </>
       )}
     </MainLayout>
   );

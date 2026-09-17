@@ -13,7 +13,6 @@ import type { RootState } from "../../../store/store"
 import {
   canEditBrief,
   canReviewBrief,
-  canClientSeeDeliveryFiles,
   acceptBrief,
   fetchMyBriefs,
   getClientKanbanStatus,
@@ -22,10 +21,8 @@ import {
   type BriefPriority,
   type BriefStatus,
 } from "../../../lib/briefs-api"
-import ClientDeliveryReviewSheet from "../../../components/dashboard/briefs/ClientDeliveryReviewSheet"
 
 const STATUS_COLUMNS: { id: BriefStatus; label: string; accentColor: string }[] = [
-  { id: "not_assigned", label: "Not Assigned", accentColor: "bg-gray-400" },
   { id: "assigned", label: "Assigned", accentColor: "bg-blue-500" },
   { id: "in_progress", label: "In Progress", accentColor: "bg-amber-500" },
   { id: "under_review", label: "Under Review", accentColor: "bg-purple-500" },
@@ -39,7 +36,7 @@ const CLIENT_STATUS_TRANSITIONS: Partial<Record<BriefStatus, BriefStatus[]>> = {
   under_review: ["completed", "revision"],
 }
 
-const PRIORITY_EDITABLE_STATUSES: BriefStatus[] = ["not_assigned", "assigned", "in_progress"]
+const PRIORITY_EDITABLE_STATUSES: BriefStatus[] = ["assigned", "in_progress"]
 
 const canChangePriority = (status: BriefStatus) => PRIORITY_EDITABLE_STATUSES.includes(status)
 
@@ -50,11 +47,6 @@ const AssignJobs = () => {
   const [briefs, setBriefs] = useState<Brief[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null)
-  const [reviewBrief, setReviewBrief] = useState<{
-    id: string
-    title: string
-    mode: "review" | "revision"
-  } | null>(null)
 
   const fetchBriefs = useCallback(async () => {
     if (!token) return
@@ -88,7 +80,7 @@ const AssignJobs = () => {
       const kanbanStatus = getClientKanbanStatus(brief.status)
       const status = STATUS_COLUMNS.some((column) => column.id === kanbanStatus)
         ? kanbanStatus
-        : "not_assigned"
+        : "assigned"
       grouped[status].push(brief)
     })
 
@@ -146,12 +138,13 @@ const AssignJobs = () => {
 
       if (toStatus === "completed") {
         await acceptBrief(token, briefId)
-      } else if (toStatus === "revision") {
-        setReviewBrief({
-          id: briefId,
-          title: brief.title,
-          mode: "revision",
-        })
+        updateBriefInState(briefId, { status: "awaiting_final_delivery" })
+        toast.success("Preview accepted — preparing your final files")
+        return
+      }
+
+      if (toStatus === "revision") {
+        navigate(`/client/briefs/${briefId}`)
         return
       }
 
@@ -173,20 +166,16 @@ const AssignJobs = () => {
     const brief = briefs.find((item) => item._id === id)
     if (!brief) return
 
-    if (canReviewBrief(brief.status)) {
-      setReviewBrief({ id: brief._id, title: brief.title, mode: "review" })
+    if (canReviewBrief(brief.status) || !canEditBrief(brief.status)) {
+      navigate(`/client/briefs/${brief._id}`)
       return
     }
 
-    if (!canEditBrief(brief.status)) {
-      toast.error("This brief can no longer be edited")
-      return
-    }
     navigate(`/client/edit-brief/${id}`)
   }
 
-  const handleReviewSuccess = (briefId: string, newStatus: "completed" | "revision") => {
-    updateBriefInState(briefId, { status: newStatus })
+  const handleReviewNavigate = (briefId: string) => {
+    navigate(`/client/briefs/${briefId}`)
   }
 
   const getCardProps = (brief: Brief) => ({
@@ -240,7 +229,7 @@ const AssignJobs = () => {
                       onClick={() => handleTaskClick(brief._id)}
                       onReview={
                         canReviewBrief(brief.status)
-                          ? () => setReviewBrief({ id: brief._id, title: brief.title, mode: "review" })
+                          ? () => handleReviewNavigate(brief._id)
                           : undefined
                       }
                       onPriorityChange={
@@ -256,18 +245,6 @@ const AssignJobs = () => {
           </div>
         </div>
       )}
-
-      <ClientDeliveryReviewSheet
-        open={!!reviewBrief}
-        briefId={reviewBrief?.id ?? null}
-        briefTitle={reviewBrief?.title}
-        token={token}
-        initialMode={reviewBrief?.mode}
-        onClose={() => setReviewBrief(null)}
-        onSuccess={(newStatus) => {
-          if (reviewBrief) handleReviewSuccess(reviewBrief.id, newStatus)
-        }}
-      />
     </MainLayout>
   )
 }

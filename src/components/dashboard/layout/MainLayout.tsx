@@ -10,6 +10,7 @@ import { useIsMobile } from '../../../hooks/use-mobile';
 import { Drawer, DrawerContent, DrawerTrigger } from '../ui/drawer';
 import { Button } from '../ui/button';
 import { Menu } from 'lucide-react';
+import AdminPermissionGate from '../../AdminPermissionGate';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -67,7 +68,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </DrawerContent>
           </Drawer>
           <main className="flex-1 overflow-auto p-6 pb-24 pt-16">
-            {children}
+            {isAdminRoute ? <AdminPermissionGate>{children}</AdminPermissionGate> : children}
           </main>
         </div>
       </div>
@@ -92,7 +93,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
         {/* Main Content Area automatically expands/contracts */}
         <main className="flex-1 bg-[#101010] overflow-auto px-16 py-12">
-          {children}
+          {isAdminRoute ? <AdminPermissionGate>{children}</AdminPermissionGate> : children}
         </main>
       </div>
     </div>
